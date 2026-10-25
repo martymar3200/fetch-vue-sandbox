@@ -159,11 +159,65 @@ describe('RequestDashboard', () => {
       })
 
 
-      await wrapper.vm.handlePickListModalOpen('Edit')
+      await wrapper.vm.handlePickListModalOpen('Create')
 
       expect(notify).toHaveBeenCalledWith(
         expect.objectContaining({ type: 'negative' })
       )
+    })
+
+    it('when adding with a default building set, applies it and shows only the pick list modal', async () => {
+      useUserStore().userData = {
+        default_building_id: 2,
+        permissions: []
+      }
+
+      const requestStore = useRequestStore()
+      requestStore.getRequestJobList.mockResolvedValue({})
+
+      wrapper = mount(RequestDashboard, {
+        global: {
+          provide: {
+            'get-item-location': vi.fn().mockReturnValue('N/A'),
+            'format-date-time': vi.fn().mockReturnValue('N/A'),
+            'get-nested-key-path': vi.fn().mockReturnValue('N/A'),
+            'render-item-barcode-display': vi.fn().mockReturnValue('N/A')
+          }
+        }
+      })
+
+      // ignore the dashboard's initial load
+      requestStore.getRequestJobList.mockClear()
+
+      await wrapper.vm.handlePickListModalOpen('Add')
+
+      expect(wrapper.vm.filterRequestsByBuilding).toBe(2)
+      expect(wrapper.vm.showPickListModal).toBe('Add')
+      expect(wrapper.vm.showAddPickList).toBe(false)
+      expect(requestStore.getRequestJobList).not.toHaveBeenCalled()
+    })
+
+    it('when adding with no default building set, shows the building and pick list modal', async () => {
+      useUserStore().userData = {
+        default_building_id: null,
+        permissions: []
+      }
+
+      wrapper = mount(RequestDashboard, {
+        global: {
+          provide: {
+            'get-item-location': vi.fn().mockReturnValue('N/A'),
+            'format-date-time': vi.fn().mockReturnValue('N/A'),
+            'get-nested-key-path': vi.fn().mockReturnValue('N/A'),
+            'render-item-barcode-display': vi.fn().mockReturnValue('N/A')
+          }
+        }
+      })
+
+      await wrapper.vm.handlePickListModalOpen('Add')
+
+      expect(wrapper.vm.filterRequestsByBuilding).toBeNull()
+      expect(wrapper.vm.showPickListModal).toBe('Add')
     })
   })
 

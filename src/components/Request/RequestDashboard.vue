@@ -551,7 +551,12 @@
       <template #header-content="{ hideModal }">
         <q-card-section class="row items-center justify-between q-pb-none">
           <h2 class="text-h6">
-            {{ showPickListModal == 'Create' ? 'Filter Requests By Building' : 'Filter Requests & Select Pick List' }}
+            <template v-if="showPickListModal == 'Create'">
+              Filter Requests By Building
+            </template>
+            <template v-else>
+              {{ userData?.default_building_id ? 'Select Pick List' : 'Filter Requests & Select Pick List' }}
+            </template>
           </h2>
 
           <BaseButton
@@ -567,7 +572,11 @@
 
       <template #main-content>
         <q-card-section class="column no-wrap items-center">
-          <div class="form-group">
+          <!-- hidden when the user's default building has already been applied -->
+          <div
+            v-if="!userData?.default_building_id"
+            class="form-group"
+          >
             <label class="form-group-label">
               Building
             </label>
@@ -584,7 +593,8 @@
 
           <div
             v-if="showPickListModal == 'Add'"
-            class="form-group q-mt-md"
+            class="form-group"
+            :class="{ 'q-mt-md': !userData?.default_building_id }"
           >
             <label class="form-group-label">
               Add To Pick List
@@ -1264,8 +1274,13 @@ const resetPickListForm = () => {
 }
 
 const handlePickListModalOpen = async (mode) => {
+  // Staff work in one building, so a default building is applied without asking
   if (userData.value?.default_building_id) {
     filterRequestsByBuilding.value = userData.value.default_building_id
+  }
+
+  // Create only needs the building; Add still needs a pick list chosen in the modal
+  if (mode == 'Create' && filterRequestsByBuilding.value) {
     await loadRequestJobsByBuilding(mode)
   } else {
     showPickListModal.value = mode
