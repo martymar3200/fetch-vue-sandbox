@@ -247,7 +247,7 @@
                     {{ tray.barcode.value }}
                   </q-item-label>
                   <q-item-label caption>
-                    {{ tray.items.length }} Items
+                    {{ trayItemCounts[tray.id] ?? 0 }} Items
                   </q-item-label>
                 </q-item-section>
               </q-item>
@@ -791,6 +791,15 @@ const isAddTrayEnabled = computed(() => {
          allItemsVerified.value &&
          accessionJob.value.status !== 'Paused' &&
          accessionJob.value.status !== 'Completed'
+})
+
+// item counts per tray from the job's items (job trays don't include their items)
+const trayItemCounts = computed(() => {
+  const counts = {}
+  for (const item of accessionJob.value.items ?? []) {
+    counts[item.tray_id] = (counts[item.tray_id] ?? 0) + 1
+  }
+  return counts
 })
 
 const handleKeyboardShortcut = (event) => {

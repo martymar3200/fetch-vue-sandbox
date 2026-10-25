@@ -203,8 +203,18 @@ export const useAccessionStore = defineStore('accession-store', {
         ]
         this.originalAccessionContainer = { ... this.accessionContainer }
 
-        // reload the accession job data to get the latest items
-        await this.getAccessionJob(this.accessionJob.workflow_id)
+        // add the new item to accessionJob items instead of reloading the whole job,
+        // which slowed every scan and grew with the size of the job
+        this.accessionJob.items = [
+          ...(this.accessionJob.items ?? []),
+          res.data
+        ]
+        if (this.originalAccessionJob) {
+          this.originalAccessionJob.items = [
+            ...(this.originalAccessionJob.items ?? []),
+            res.data
+          ]
+        }
       } catch (error) {
         throw error
       }
