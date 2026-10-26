@@ -13,7 +13,7 @@
         <JobActionButtons
           v-if="job?.status !== 'Completed'"
           :status="job?.status || 'Created'"
-          :can-complete="containers.length > 0"
+          :can-complete="containers.length > 0 && !scanning"
           :loading="actionLoading"
           @start="startJob"
           @complete="showCompleteDialog = true"
@@ -182,6 +182,7 @@
         <div
           v-if="scanError"
           class="text-negative q-mt-sm"
+          role="alert"
         >
           {{ scanError }}
         </div>
@@ -223,21 +224,9 @@
           <template #body-cell-status="props">
             <q-td :props="props">
               <q-badge
-                :color="props.row.scanned_for_transfer ? 'positive' : 'grey'"
-                :label="props.row.scanned_for_transfer ? 'Moved' : 'Pending'"
-              />
-            </q-td>
-          </template>
-          <template #body-cell-actions="props">
-            <q-td :props="props">
-              <BaseButton
-                v-if="!props.row.scanned_for_transfer"
-                flat
-                round
-                size="sm"
-                icon="delete"
-                color="negative"
-                @click="removeContainer(props.row)"
+                :color="rowStatus(props.row).color"
+                :text-color="rowStatus(props.row).textColor"
+                :label="rowStatus(props.row).label"
               />
             </q-td>
           </template>
@@ -252,7 +241,7 @@
             size="48px"
             class="q-mb-sm"
           />
-          <div>No containers scanned yet</div>
+          <div>No containers moved yet</div>
         </div>
       </q-card-section>
     </q-card>
@@ -261,7 +250,7 @@
     <JobConfirmDialog
       v-model="showCompleteDialog"
       title="Complete Move Job?"
-      message="Are you sure you want to complete this move job?"
+      message="Each move has already been saved as it was scanned. Are you sure you want to complete this move job?"
       confirm-label="Complete"
       confirm-color="positive"
       :loading="completing"
@@ -273,7 +262,6 @@
       v-model="showCancelDialog"
       title="Cancel Move Job?"
       message="Are you sure you want to cancel this move job?"
-      warning="Any pending moves will need to be re-done."
       confirm-label="Yes, Cancel"
       confirm-color="negative"
       :loading="cancelling"
@@ -325,8 +313,9 @@ const { addDataToIndexDb, getDataInIndexDb, deleteDataInIndexDb } = useIndexDbHa
 
 
 // Store refs
-const { appIsLoadingData } = storeToRefs(useGlobalStore())
+const { appIsLoadingData, appIsOffline, appPendingSync } = storeToRefs(useGlobalStore())
 const { shelvingJob } = storeToRefs(shelvingStore)
+const { barcodeDetails } = storeToRefs(barcodeStore)
 const {
   patchShelvingJob,
   postShelvingJobContainer,
@@ -336,7 +325,7 @@ const {
   getShelvingNonTrayItemDetails,
   getShelvingJob
 } = shelvingStore
-const { verifyBarcode, getBarcodeDetails } = barcodeStore
+const { verifyBarcode } = barcodeStore
 
 // Injected helpers
 const currentIsoDate = inject('current-iso-date')
@@ -443,16 +432,36 @@ const containerColumns = computed(() => {
       label: 'Status',
       field: 'scanned_for_transfer',
       align: 'center'
-    },
-    {
-      name: 'actions',
-      label: '',
-      align: 'center'
     }
   )
 
   return cols
 })
+
+const rowStatus = (row) => {
+  if (row.queued_offline) {
+    return {
+      label: 'Queued (offline)',
+      color: 'warning',
+      textColor: 'black'
+    }
+  }
+  if (row.scanned_for_transfer) {
+    return {
+      label: 'Moved',
+      color: 'positive',
+      textColor: 'white'
+    }
+  }
+  // Only rows saved by the older version of this page, which queued scans until Complete
+  return {
+    label: 'Not moved - scan again',
+    color: 'grey-8',
+    textColor: 'white'
+  }
+}
+
+const barcodeValue = (row) => row.barcode?.value || row.barcode
 
 // Methods
 const handleInputClick = (inputRef) => {
@@ -547,13 +556,25 @@ const scanDestination = async () => {
 
     if (moveType.value === 'tray-item') {
       // Scanning a tray as destination
-      const res = await getShelvingTrayContainerDetails(destinationBarcodeInput.value)
-      currentDestination.value = res.data.barcode.value
-      destinationOwner.value = res.data.owner?.name || ''
-      destinationSizeClass.value = res.data.size_class?.name || ''
-      destinationId.value = res.data.id
+      try {
+        const res = await getShelvingTrayContainerDetails(destinationBarcodeInput.value)
+        currentDestination.value = res.data.barcode.value
+        destinationOwner.value = res.data.owner?.name || ''
+        destinationSizeClass.value = res.data.size_class?.name || ''
+        destinationId.value = res.data.id
+      } catch (error) {
+        // Offline (or the request failed before the 'offline' event fired): accept the
+        // scanned tray as-is; the server validates it when the queued moves sync.
+        if (!appIsOffline.value && error?.code !== 'ERR_NETWORK') {
+          throw error
+        }
+        currentDestination.value = destinationBarcodeInput.value
+        destinationOwner.value = 'Offline (Pending Sync)'
+        destinationSizeClass.value = ''
+        destinationId.value = null
+      }
     } else {
-      // Scanning a shelf as destination
+      // Scanning a shelf as destination (the store falls back to the scanned barcode offline)
       const res = await getShelfByBarcode(destinationBarcodeInput.value)
       currentDestination.value = res.data.barcode.value
       currentDestinationLocation.value = res.data.location
@@ -561,6 +582,7 @@ const scanDestination = async () => {
       destinationSizeClass.value = res.data.shelf_type?.size_class?.name || ''
       destinationId.value = res.data.id
       nextPosition.value = shelvingJob.value.nextAvailablePosition
+      positionNumber.value = nextPosition.value
     }
 
     destinationBarcodeInput.value = ''
@@ -586,153 +608,159 @@ const clearDestination = () => {
   destinationSizeClass.value = ''
   destinationId.value = null
   nextPosition.value = null
+  positionNumber.value = null
+  scanError.value = ''
   saveState()
+
+  nextTick(() => {
+    destinationInput.value?.focus()
+  })
 }
 
+// Look up the scanned container for the list (owner, size class, type). Needs the
+// server, so it's skipped offline; the server still validates the move when it syncs.
+const lookupContainer = async (barcode) => {
+  if (moveType.value === 'tray-item') {
+    await verifyBarcode(barcode, 'Item')
+    const res = await getShelvingTrayItemDetails(barcode)
+    return {
+      ...res.data,
+      container_type: { type: 'Item' }
+    }
+  }
+
+  await verifyBarcode(barcode, [
+    'Item',
+    'Tray'
+  ])
+  if (barcodeDetails.value?.type?.name === 'Tray') {
+    const res = await getShelvingTrayContainerDetails(barcode)
+    return {
+      ...res.data,
+      container_type: { type: 'Tray' }
+    }
+  }
+  const res = await getShelvingNonTrayItemDetails(barcode)
+  return {
+    ...res.data,
+    container_type: { type: 'Non-Tray' }
+  }
+}
+
+const upsertContainer = (row) => {
+  const index = containers.value.findIndex(c => barcodeValue(c) === barcodeValue(row))
+  if (index === -1) {
+    containers.value.push(row)
+  } else {
+    // Re-scanning a container already in this job moves it again (e.g. to fix a mistake)
+    containers.value.splice(index, 1, row)
+  }
+}
+
+// Save one move as soon as it's scanned, the same way Direct to Shelf does.
 const scanContainer = async () => {
-  if (!containerBarcodeInput.value) {
+  const barcode = containerBarcodeInput.value?.trim()
+  if (!barcode) {
     return
   }
 
-  // Check if already in list
-  if (containers.value.some(c => (c.barcode?.value || c.barcode) === containerBarcodeInput.value)) {
-    scanError.value = 'Container already added'
+  if (scanning.value) {
+    scanError.value = 'Still saving the previous move. Scan this container again.'
     return
   }
 
-  if (moveType.value !== 'tray-item' && !positionNumber.value) {
-    scanError.value = 'Position required'
+  const isShelfMove = moveType.value !== 'tray-item'
+  if (isShelfMove && !positionNumber.value) {
+    scanError.value = appIsOffline.value || nextPosition.value ? 'Position required' : 'Shelf is full'
     return
   }
+
+  scanning.value = true
+  scanError.value = ''
+  const position = isShelfMove ? parseInt(positionNumber.value) : null
 
   try {
-    appIsLoadingData.value = true
-    scanError.value = ''
+    const details = appIsOffline.value ? null : await lookupContainer(barcode)
 
-    // Verify barcode type
-    if (moveType.value === 'tray-item') {
-      await verifyBarcode(containerBarcodeInput.value, 'Item')
-    } else {
-      await verifyBarcode(containerBarcodeInput.value, [
-        'Item',
-        'Tray'
-      ])
+    const payload = {
+      job_id: job.value.id,
+      container_barcode_value: barcode,
+      scanned_for_shelving: true,
+      shelved_dt: currentIsoDate()
     }
-
-    // Get container details
-    let containerData = null
-    const barcodeInfo = await getBarcodeDetails(containerBarcodeInput.value)
-
-    if (moveType.value === 'tray-item') {
-      const res = await getShelvingTrayItemDetails(containerBarcodeInput.value)
-      containerData = {
-        ...res.data,
-        barcode: res.data.barcode,
-        owner: res.data.owner,
-        scanned_for_transfer: false,
-        destination_tray_barcode: currentDestination.value
+    if (isShelfMove) {
+      payload.shelf_barcode_value = currentDestination.value
+      payload.shelf_position_number = position
+      if (details) {
+        payload.trayed = details.container_type.type === 'Tray'
       }
     } else {
-      // Compute display location based on current destination and position
-      const displayLocation = getItemLocation({
-        shelf_position: {
-          location: `${currentDestinationLocation.value}-${positionNumber.value}`
-        }
-      })
+      payload.destination_tray_barcode_value = currentDestination.value
+    }
 
-      if (barcodeInfo.data.type.name === 'Tray') {
-        const res = await getShelvingTrayContainerDetails(containerBarcodeInput.value)
-        containerData = {
-          ...res.data,
-          barcode: res.data.barcode,
-          owner: res.data.owner,
-          size_class: res.data.size_class,
-          container_type: { type: 'Tray' },
-          scanned_for_transfer: false,
-          new_shelf_position: positionNumber.value,
-          display_location: displayLocation
-        }
+    const res = await postShelvingJobContainer(payload)
+    const savedOnServer = Boolean(res?.fromServer)
+
+    upsertContainer({
+      ...(details || {}),
+      id: res?.data?.shelving_container_id ?? details?.id ?? null,
+      barcode: details?.barcode || { value: barcode },
+      owner: details?.owner || null,
+      size_class: details?.size_class || null,
+      container_type: details?.container_type || null,
+      new_shelf_position: position,
+      destination_tray_barcode: isShelfMove ? undefined : currentDestination.value,
+      display_location: isShelfMove
+        ? getItemLocation({
+          shelf_position: {
+            location: `${currentDestinationLocation.value}-${position}`
+          }
+        })
+        : undefined,
+      scanned_for_transfer: true,
+      queued_offline: !savedOnServer
+    })
+
+    if (isShelfMove) {
+      if (savedOnServer) {
+        // Server says where the next free spot is (null when the shelf is now full)
+        nextPosition.value = res.data?.next_available_position ?? null
+        positionNumber.value = nextPosition.value
       } else {
-        const res = await getShelvingNonTrayItemDetails(containerBarcodeInput.value)
-        containerData = {
-          ...res.data,
-          barcode: res.data.barcode,
-          owner: res.data.owner,
-          size_class: res.data.size_class,
-          container_type: { type: 'Non-Tray' },
-          scanned_for_transfer: false,
-          new_shelf_position: positionNumber.value,
-          display_location: displayLocation
-        }
+        positionNumber.value = position + 1
       }
     }
 
-    containers.value.push(containerData)
     containerBarcodeInput.value = ''
-
-    // Auto-increment position for shelf moves
-    if (moveType.value !== 'tray-item' && positionNumber.value) {
-      positionNumber.value = positionNumber.value + 1
-    }
-
     saveState()
 
+    notify({
+      type: savedOnServer ? 'positive' : 'info',
+      message: savedOnServer ? 'Container moved!' : 'Move queued. It will be saved when you are back online.'
+    })
+  } catch (error) {
+    // The server has already recorded a move discrepancy for rejected moves
+    scanError.value = error?.response?.data?.detail || (typeof error === 'string' ? error : '') || 'Failed to move container'
+    notify({
+      type: 'negative',
+      message: scanError.value
+    })
+  } finally {
+    scanning.value = false
     nextTick(() => {
       containerInput.value?.focus()
     })
-  } catch (error) {
-    scanError.value = error?.response?.data?.detail || 'Failed to scan container'
-  } finally {
-    appIsLoadingData.value = false
   }
 }
 
-const removeContainer = (container) => {
-  const barcode = container.barcode?.value || container.barcode
-  containers.value = containers.value.filter(c => (c.barcode?.value || c.barcode) !== barcode)
-  saveState()
-}
-
-const moveContainer = async () => {
-  if (!containerBarcodeInput.value) {
-    return
-  }
-
-  if (moveType.value !== 'tray-item' && !positionNumber.value) {
-    scanError.value = 'Position required'
-    return
-  }
-
-  // First add to list
-  await scanContainer()
-}
+const moveContainer = () => scanContainer()
 
 const completeJob = async () => {
+  if (scanning.value) {
+    return
+  }
   completing.value = true
   try {
-    // Process all moves via backend
-    for (const container of containers.value) {
-      if (!container.scanned_for_transfer) {
-        const payload = {
-          job_id: job.value.id,
-          container_barcode_value: container.barcode?.value || container.barcode,
-          scanned_for_shelving: true,
-          shelved_dt: currentIsoDate()
-        }
-
-        if (moveType.value === 'tray-item') {
-          payload.destination_tray_barcode_value = currentDestination.value
-        } else {
-          payload.shelf_barcode_value = currentDestination.value
-          payload.shelf_position_number = parseInt(container.new_shelf_position)
-          payload.trayed = container.container_type?.type === 'Tray'
-        }
-
-        await postShelvingJobContainer(payload)
-        container.scanned_for_transfer = true
-      }
-    }
-
     await patchShelvingJob({
       id: job.value.id,
       status: 'Completed',
@@ -765,23 +793,69 @@ const saveState = () => {
     destinationOwner: destinationOwner.value,
     destinationSizeClass: destinationSizeClass.value,
     destinationId: destinationId.value,
-    nextPosition: nextPosition.value
+    nextPosition: nextPosition.value,
+    positionNumber: positionNumber.value,
+    // Snapshot of the job so the page can reopen offline
+    job: JSON.parse(JSON.stringify(job.value || {}))
   }
   addDataToIndexDb('shelvingStore', 'moveJob', state)
 }
 
-const loadState = async () => {
+const readSavedState = async (jobId) => {
   const res = await getDataInIndexDb('shelvingStore')
   // Use loose equality to handle string/number mismatch
-  if (res?.data?.moveJob && res.data.moveJob.jobId == job.value?.id) {
-    containers.value = res.data.moveJob.containers || []
-    currentDestination.value = res.data.moveJob.destination || ''
-    currentDestinationLocation.value = res.data.moveJob.destinationLocation || ''
-    destinationOwner.value = res.data.moveJob.destinationOwner || ''
-    destinationSizeClass.value = res.data.moveJob.destinationSizeClass || ''
-    destinationId.value = res.data.moveJob.destinationId || null
-    nextPosition.value = res.data.moveJob.nextPosition || null
+  if (res?.data?.moveJob && res.data.moveJob.jobId == jobId) {
+    return res.data.moveJob
   }
+  return null
+}
+
+const restoreDestination = (saved) => {
+  currentDestination.value = saved.destination || ''
+  currentDestinationLocation.value = saved.destinationLocation || ''
+  destinationOwner.value = saved.destinationOwner || ''
+  destinationSizeClass.value = saved.destinationSizeClass || ''
+  destinationId.value = saved.destinationId || null
+  nextPosition.value = saved.nextPosition || null
+  positionNumber.value = saved.positionNumber || nextPosition.value
+}
+
+const loadState = (saved) => {
+  if (saved.job?.id && shelvingJob.value?.id != saved.jobId) {
+    shelvingJob.value = saved.job
+  }
+  containers.value = saved.containers || []
+  restoreDestination(saved)
+}
+
+const mapServerContainers = (shelvingJobContainers) => {
+  const rows = shelvingJobContainers.map(c => ({
+    id: c.id,
+    barcode: c.tray?.barcode || c.non_tray_item?.barcode || c.item?.barcode || { value: c.container_barcode },
+    owner: c.tray?.owner || c.non_tray_item?.owner || c.item?.tray?.owner,
+    size_class: c.tray?.size_class || c.non_tray_item?.size_class,
+    container_type: c.tray ? { type: 'Tray' } : c.non_tray_item ? { type: 'Non-Tray' } : { type: 'Item' },
+    new_shelf_position: c.shelf_position_number,
+    scanned_for_transfer: true,
+    queued_offline: false,
+    destination_tray_barcode: c.destination_tray?.barcode?.value,
+    display_location: c.actual_shelf_position ? getItemLocation(c.actual_shelf_position) : '-'
+  }))
+
+  // An item moved more than once in this job has one record per move; show its latest
+  const byBarcode = new Map()
+  rows.forEach(row => byBarcode.set(barcodeValue(row), row))
+  return [...byBarcode.values()]
+}
+
+const focusFirstInput = () => {
+  nextTick(() => {
+    if (!currentDestination.value) {
+      destinationInput.value?.focus()
+    } else {
+      containerInput.value?.focus()
+    }
+  })
 }
 
 // Watch for barcode scans
@@ -801,28 +875,37 @@ watch(compiledBarCode, (barcode) => {
 
 // Initialize
 onMounted(async () => {
-  // Load job data if jobId is provided
-  if (route.params.jobId) {
+  const jobId = route.params.jobId
+  if (jobId) {
+    const saved = await readSavedState(jobId)
+
+    // Same rule as Direct to Shelf: offline, or with moves still waiting to sync, the
+    // server doesn't have the full picture yet, so reopen from the saved copy.
+    if ((appIsOffline.value || appPendingSync.value) && saved) {
+      loadState(saved)
+      focusFirstInput()
+      return
+    }
+
     try {
       appIsLoadingData.value = true
-      await getShelvingJob(route.params.jobId)
+      await getShelvingJob(jobId)
 
-      // Load containers from job data for completed/resumed jobs
-      if (shelvingJob.value?.shelving_job_containers?.length > 0) {
-        containers.value = shelvingJob.value.shelving_job_containers.map(c => ({
-          id: c.id,
-          barcode: c.tray?.barcode || c.non_tray_item?.barcode || c.item?.barcode || { value: c.container_barcode },
-          owner: c.tray?.owner || c.non_tray_item?.owner || c.item?.tray?.owner,
-          size_class: c.tray?.size_class || c.non_tray_item?.size_class,
-          container_type: c.tray ? { type: 'Tray' } : c.non_tray_item ? { type: 'Non-Tray' } : { type: 'Item' },
-          new_shelf_position: c.shelf_position_number,
-          scanned_for_transfer: true,
-          destination_tray_barcode: c.destination_tray?.barcode?.value,
-          display_location: c.actual_shelf_position ? getItemLocation(c.actual_shelf_position) : '-'
-        }))
+      const serverContainers = shelvingJob.value?.shelving_job_containers || []
+      containers.value = mapServerContainers(serverContainers)
 
+      // Scans saved by the older version of this page that were never sent
+      const neverSent = (saved?.containers || []).filter(c =>
+        !c.scanned_for_transfer && !containers.value.some(row => barcodeValue(row) === barcodeValue(c))
+      )
+      containers.value.push(...neverSent)
+
+      if (saved?.destination) {
+        // The saved copy knows the destination currently in use
+        restoreDestination(saved)
+      } else if (serverContainers.length > 0) {
         // Infer destination from first container for resumed/completed jobs
-        const first = shelvingJob.value.shelving_job_containers[0]
+        const first = serverContainers[0]
         if (moveType.value === 'tray-item') {
           if (first.destination_tray) {
             currentDestination.value = first.destination_tray.barcode?.value
@@ -839,29 +922,26 @@ onMounted(async () => {
         }
       }
     } catch (error) {
-      notify({
-        type: 'negative',
-        message: 'Failed to load move job'
-      })
-      router.push({ name: 'shelving' })
-      return
+      // The request can fail before the 'offline' event fires; use the saved copy if there is one
+      if (saved) {
+        loadState(saved)
+      } else {
+        notify({
+          type: 'negative',
+          message: 'Failed to load move job'
+        })
+        router.push({ name: 'shelving' })
+        return
+      }
     } finally {
       appIsLoadingData.value = false
     }
+
+    // Keep the saved copy in step with the server
+    saveState()
   }
 
-  // Only load local state if no containers loaded from backend
-  if (containers.value.length === 0) {
-    await loadState()
-  }
-
-  nextTick(() => {
-    if (!currentDestination.value) {
-      destinationInput.value?.focus()
-    } else {
-      containerInput.value?.focus()
-    }
-  })
+  focusFirstInput()
 })
 </script>
 
