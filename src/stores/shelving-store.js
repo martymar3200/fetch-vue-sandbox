@@ -365,6 +365,8 @@ export const useShelvingStore = defineStore('shelving-store', {
             this.shelvingJob.nextAvailablePosition = res.data.next_available_position
           }
         }
+        // { fromServer: true, data } when saved, { fromServer: false } when queued offline
+        return res
       } catch (error) {
         throw error
       }
