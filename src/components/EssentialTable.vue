@@ -533,6 +533,16 @@ const resetTablePagination = () => {
   paginationConfig.value.rowsPerPage = 50
 }
 
+// reloads from page 1 with the current sort and page size (ex: after a server side filter changes)
+const reloadFromFirstPage = () => {
+  onTableRequest({
+    pagination: {
+      ...paginationConfig.value,
+      page: 1
+    }
+  })
+}
+
 const filterTableData = () => {
   // get all user selected filters
   const activeFilters = localFilterOptions.value.flatMap(opt => {
@@ -658,7 +668,8 @@ const reorderTableItemDOM = (e) => {
 
 defineExpose({
   clearSelectedData,
-  resetTablePagination
+  resetTablePagination,
+  reloadFromFirstPage
 })
 </script>
 

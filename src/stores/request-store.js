@@ -1,6 +1,9 @@
 import { defineStore } from 'pinia'
 import inventoryServiceApi from '@/http/InventoryService.js'
 
+// the request and batch lists share one table: only the newest load may fill it, however the responses arrive
+let latestListLoad = 0
+
 export const useRequestStore = defineStore('request-store', {
   state: () => ({
     requestJobListTotal: 0,
@@ -84,6 +87,7 @@ export const useRequestStore = defineStore('request-store', {
       }
     },
     async getRequestJobList (paramsObj) {
+      const listLoad = ++latestListLoad
       try {
         const res = await this.$api.get(inventoryServiceApi.requests, {
           params: {
@@ -91,6 +95,9 @@ export const useRequestStore = defineStore('request-store', {
             ...paramsObj
           }
         })
+        if (listLoad !== latestListLoad) {
+          return
+        }
         this.requestJobList = res.data.items
 
         // keep track of response total for pagination
@@ -110,8 +117,6 @@ export const useRequestStore = defineStore('request-store', {
     async postRequestJob (payload) {
       try {
         await this.$api.post(inventoryServiceApi.requests, payload)
-        // refresh the requestJobList using request view filter since this endpoint only triggers from the request view tab
-        await this.getRequestJobList({ queue: true })
       } catch (error) {
         throw error
       }
@@ -120,8 +125,6 @@ export const useRequestStore = defineStore('request-store', {
       try {
         const res = await this.$api.patch(`${inventoryServiceApi.requests}${payload.id}`, payload)
         this.requestJob = res.data
-        // refresh the requestJobList using request view filter since this endpoint only triggers from the request view tab
-        await this.getRequestJobList({ queue: true })
       } catch (error) {
         throw error
       }
@@ -135,6 +138,7 @@ export const useRequestStore = defineStore('request-store', {
       }
     },
     async getRequestBatchJobList (qParams) {
+      const listLoad = ++latestListLoad
       try {
         const res = await this.$api.get(inventoryServiceApi.batchUpload, {
           params: {
@@ -142,6 +146,9 @@ export const useRequestStore = defineStore('request-store', {
             batch_upload_type: 'request'
           }
         })
+        if (listLoad !== latestListLoad) {
+          return
+        }
         this.requestJobList = res.data.items
 
         // keep track of response total for pagination
@@ -165,9 +172,6 @@ export const useRequestStore = defineStore('request-store', {
         formData.append('file', payload.file)
         formData.append('requested_by_id', payload.requested_by_id)
         await this.$api.post(`${inventoryServiceApi.batchUpload}request`, formData)
-
-        // reload batch request data
-        await this.getRequestBatchJobList()
       } catch (error) {
         throw error
       }

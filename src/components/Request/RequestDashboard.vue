@@ -41,6 +41,7 @@
                   {label: 'Batch View', value: 'batch_view'}
                 ]"
                 @update:model-value="clearTableSelection(); requestTableComponent.resetTablePagination(); loadRequestJobs();"
+                :disabled="isPickListMode"
                 class="text-no-wrap toggle-modern"
               />
             </div>
@@ -192,7 +193,7 @@
                   outline
                   label="Cancel"
                   class="btn-no-wrap text-body1 q-ml-xs full-height"
-                  @click="resetPickListForm(); requestTableComponent.resetTablePagination(); loadRequestJobs();"
+                  @click="leavePickListMode()"
                 />
               </div>
             </div>
@@ -207,7 +208,7 @@
               :button-two-color="'black'"
               :button-two-label="'Cancel'"
               :button-two-outline="true"
-              @button-two-click="resetPickListForm(); requestTableComponent.resetTablePagination(); loadRequestJobs();"
+              @button-two-click="leavePickListMode()"
             />
           </template>
 
@@ -217,6 +218,8 @@
               v-if="showFilterRow"
               class="filter-row"
             >
+              <!-- lines the filters up with their columns when the selection column is showing -->
+              <q-th v-if="isPickListMode" />
               <q-th
                 v-for="col in cols"
                 :key="col.name"
@@ -228,12 +231,15 @@
                   <q-input
                     v-if="col.name === 'id'"
                     v-model="columnFilters.id"
+                    type="number"
                     dense
                     outlined
                     clearable
                     placeholder="Search..."
+                    aria-label="Filter by Request ID"
                     class="column-filter-input"
                     @keyup.enter="applyColumnFilters"
+                    @clear="applyColumnFilters"
                     @click.stop
                   >
                     <template #prepend>
@@ -255,8 +261,9 @@
                     multiple
                     emit-value
                     map-options
-                    :options="requestTypeOptionsFromData.length > 0 ? requestTypeOptionsFromData : requestTypeOptions"
+                    :options="requestTypeOptions"
                     placeholder="All"
+                    aria-label="Filter by Request Type"
                     class="column-filter-input"
                     @update:model-value="applyColumnFilters"
                     @click.stop
@@ -270,8 +277,10 @@
                     outlined
                     clearable
                     placeholder="Search..."
+                    aria-label="Filter by Barcode"
                     class="column-filter-input"
                     @keyup.enter="applyColumnFilters"
+                    @clear="applyColumnFilters"
                     @click.stop
                   >
                     <template #prepend>
@@ -291,8 +300,10 @@
                     outlined
                     clearable
                     placeholder="Search..."
+                    aria-label="Filter by External Request ID"
                     class="column-filter-input"
                     @keyup.enter="applyColumnFilters"
+                    @clear="applyColumnFilters"
                     @click.stop
                   >
                     <template #prepend>
@@ -314,8 +325,10 @@
                     multiple
                     emit-value
                     map-options
-                    :options="buildingOptionsFromData.length > 0 ? buildingOptionsFromData : buildingOptions"
+                    :options="buildingOptions"
+                    :disable="isPickListMode"
                     placeholder="All"
+                    aria-label="Filter by Building"
                     class="column-filter-input"
                     @update:model-value="applyColumnFilters"
                     @click.stop
@@ -329,8 +342,10 @@
                     outlined
                     clearable
                     placeholder="Search..."
+                    aria-label="Filter by Requestor Name"
                     class="column-filter-input"
                     @keyup.enter="applyColumnFilters"
+                    @clear="applyColumnFilters"
                     @click.stop
                   >
                     <template #prepend>
@@ -352,8 +367,9 @@
                     multiple
                     emit-value
                     map-options
-                    :options="statusOptionsFromData.length > 0 ? statusOptionsFromData : requestStatusOptions"
+                    :options="requestStatusOptions"
                     placeholder="All"
+                    aria-label="Filter by Request Status"
                     class="column-filter-input"
                     @update:model-value="applyColumnFilters"
                     @click.stop
@@ -369,8 +385,9 @@
                     multiple
                     emit-value
                     map-options
-                    :options="priorityOptionsFromData.length > 0 ? priorityOptionsFromData : priorityOptions"
+                    :options="priorityOptions"
                     placeholder="All"
+                    aria-label="Filter by Priority"
                     class="column-filter-input"
                     @update:model-value="applyColumnFilters"
                     @click.stop
@@ -386,8 +403,9 @@
                     multiple
                     emit-value
                     map-options
-                    :options="mediaTypeOptionsFromData.length > 0 ? mediaTypeOptionsFromData : mediaTypeOptions"
+                    :options="mediaTypeOptions"
                     placeholder="All"
+                    aria-label="Filter by Media Type"
                     class="column-filter-input"
                     @update:model-value="applyColumnFilters"
                     @click.stop
@@ -401,8 +419,10 @@
                     outlined
                     clearable
                     placeholder="Search..."
+                    aria-label="Filter by Item Location"
                     class="column-filter-input"
                     @keyup.enter="applyColumnFilters"
+                    @clear="applyColumnFilters"
                     @click.stop
                   >
                     <template #prepend>
@@ -424,8 +444,9 @@
                     multiple
                     emit-value
                     map-options
-                    :options="deliveryLocationOptionsFromData.length > 0 ? deliveryLocationOptionsFromData : deliveryLocationOptions"
+                    :options="deliveryLocationOptions"
                     placeholder="All"
+                    aria-label="Filter by Delivery Location"
                     class="column-filter-input"
                     @update:model-value="applyColumnFilters"
                     @click.stop
@@ -442,8 +463,10 @@
                     outlined
                     clearable
                     placeholder="Search..."
+                    aria-label="Filter by Import Source"
                     class="column-filter-input"
                     @keyup.enter="applyColumnFilters"
+                    @clear="applyColumnFilters"
                     @click.stop
                   >
                     <template #prepend>
@@ -467,6 +490,7 @@
                     map-options
                     :options="batchStatusOptions"
                     placeholder="All"
+                    aria-label="Filter by Status"
                     class="column-filter-input"
                     @update:model-value="applyColumnFilters"
                     @click.stop
@@ -480,8 +504,10 @@
                     outlined
                     clearable
                     placeholder="Search..."
+                    aria-label="Filter by Uploaded By"
                     class="column-filter-input"
                     @keyup.enter="applyColumnFilters"
+                    @clear="applyColumnFilters"
                     @click.stop
                   >
                     <template #prepend>
@@ -536,7 +562,7 @@
       v-if="showCreateRequestByType"
       :type="showCreateRequestByType"
       :request-data="requestJob"
-      @change-display="requestDisplayType = $event"
+      @change-display="showUpdatedList($event)"
       @hide="showCreateRequestByType = null"
     />
 
@@ -777,8 +803,10 @@ const {
   picklists,
   mediaTypes,
   requestsPriorities,
-  requestsLocations
+  requestsLocations,
+  requestsTypes
 } = storeToRefs(useOptionStore())
+const { getOptions } = useOptionStore()
 const {
   getRequestJobList,
   getRequestJob,
@@ -862,21 +890,6 @@ const batchColumnFilters = ref({
 })
 
 // Static filter dropdown options
-const requestTypeOptions = [
-  {
-    label: 'General Delivery',
-    value: 'General Delivery'
-  },
-  {
-    label: 'ILL (InterLibrary Loan)',
-    value: 'ILL (InterLibrary Loan)'
-  },
-  {
-    label: 'Scan and Deliver',
-    value: 'Scan and Deliver'
-  }
-]
-
 const requestStatusOptions = [
   {
     label: 'New',
@@ -906,6 +919,10 @@ const batchStatusOptions = [
     value: 'Processing'
   },
   {
+    label: 'Uploaded',
+    value: 'Uploaded'
+  },
+  {
     label: 'Failed',
     value: 'Failed'
   },
@@ -919,93 +936,14 @@ const batchStatusOptions = [
   }
 ]
 
-// Dynamic filter options from current table data
-const requestTypeOptionsFromData = computed(() => {
-  const types = new Set()
-  requestJobList.value.forEach(row => {
-    if (row.request_type?.type) {
-      types.add(row.request_type.type)
-    }
-  })
-  return Array.from(types).sort().map(t => ({
-    label: t,
-    value: t
+// Filter options come from the full lookups: the table only ever holds one page of rows
+const requestTypeOptions = computed(() =>
+  requestsTypes.value.map(t => ({
+    label: t.type,
+    value: t.type
   }))
-})
+)
 
-const buildingOptionsFromData = computed(() => {
-  const buildingSet = new Set()
-  requestJobList.value.forEach(row => {
-    if (row.building?.id && row.building?.name) {
-      buildingSet.add(JSON.stringify({
-        id: row.building.id,
-        name: row.building.name
-      }))
-    }
-  })
-  return Array.from(buildingSet).map(b => {
-    const parsed = JSON.parse(b)
-    return {
-      label: parsed.name,
-      value: parsed.id
-    }
-  }).sort((a, b) => a.label.localeCompare(b.label))
-})
-
-const statusOptionsFromData = computed(() => {
-  const statuses = new Set()
-  requestJobList.value.forEach(row => {
-    if (row.status) {
-      statuses.add(row.status)
-    }
-  })
-  return Array.from(statuses).sort().map(s => ({
-    label: s,
-    value: s
-  }))
-})
-
-const priorityOptionsFromData = computed(() => {
-  const priorities = new Set()
-  requestJobList.value.forEach(row => {
-    if (row.priority?.value) {
-      priorities.add(row.priority.value)
-    }
-  })
-  return Array.from(priorities).sort().map(p => ({
-    label: p,
-    value: p
-  }))
-})
-
-const mediaTypeOptionsFromData = computed(() => {
-  const types = new Set()
-  requestJobList.value.forEach(row => {
-    const type = row.item?.media_type?.name || row.non_tray_item?.media_type?.name
-    if (type) {
-      types.add(type)
-    }
-  })
-  return Array.from(types).sort().map(t => ({
-    label: t,
-    value: t
-  }))
-})
-
-const deliveryLocationOptionsFromData = computed(() => {
-  const locations = new Set()
-  requestJobList.value.forEach(row => {
-    if (row.delivery_location?.name) {
-      locations.add(row.delivery_location.name)
-    }
-  })
-  return Array.from(locations).sort().map(l => ({
-    label: l,
-    value: l
-  }))
-})
-
-// Fallback options from store data
 const buildingOptions = computed(() =>
   buildings.value.map(b => ({
     label: b.name,
@@ -1044,6 +982,7 @@ const getStatusIcon = (status) => {
     case 'Retrieved':
       return 'mdi-truck-delivery'
     case 'Processing':
+    case 'Uploaded':
       return 'mdi-progress-clock'
     case 'Completed':
       return 'mdi-check-circle'
@@ -1062,6 +1001,7 @@ const getStatusBadgeClass = (status) => {
       return 'status-badge--new'
     case 'PickList':
     case 'Processing':
+    case 'Uploaded':
     case 'Retrieved':
       return 'status-badge--in-progress'
     case 'Completed':
@@ -1196,7 +1136,7 @@ const requestBatchTableColumns = ref([
   },
   {
     name: 'request_count',
-    field: row => row.requests?.length,
+    field: 'request_count',
     label: '# of Requests',
     align: 'left',
     sortable: true
@@ -1233,6 +1173,7 @@ const selectedRequestItems = ref([])
 const showCreateRequestByType = ref(null)
 const filterRequestsByBuilding = ref(null)
 const activePickListBuildingFilter = ref(null)
+const isPickListMode = computed(() => showCreatePickList.value || showAddPickList.value)
 
 // Logic
 
@@ -1240,8 +1181,48 @@ const formatDateTime = inject('format-date-time')
 const getItemLocation = inject('get-item-location')
 const renderItemBarcodeDisplay = inject('render-item-barcode-display')
 
+// RequestPage only loads these on a direct visit, so coming back from a details screen needs them here
+const loadMissingFilterOptions = async () => {
+  try {
+    await Promise.all([
+      {
+        type: 'buildings',
+        options: buildings,
+        sort_by: 'name'
+      },
+      {
+        type: 'requestsPriorities',
+        options: requestsPriorities,
+        sort_by: 'value'
+      },
+      {
+        type: 'requestsLocations',
+        options: requestsLocations,
+        sort_by: 'name'
+      },
+      {
+        type: 'requestsTypes',
+        options: requestsTypes,
+        sort_by: 'type'
+      },
+      {
+        type: 'mediaTypes',
+        options: mediaTypes,
+        sort_by: 'name'
+      }
+    ].filter(lookup => lookup.options.value.length == 0)
+      .map(lookup => getOptions(lookup.type, { sort_by: lookup.sort_by })))
+  } catch (error) {
+    notify({
+      type: 'negative',
+      message: error.response?.data?.detail || error.message || 'Failed to load filter options'
+    })
+  }
+}
+
 onBeforeMount(() => {
   loadRequestJobs()
+  loadMissingFilterOptions()
 
   if (currentScreenSize.value == 'xs') {
     requestTableVisibleColumns.value = [
@@ -1273,6 +1254,13 @@ const resetPickListForm = () => {
   clearTableSelection()
 }
 
+// the mode has to end before the reload, or the table keeps the pick list's building-only rows
+const leavePickListMode = () => {
+  resetPickListForm()
+  requestTableComponent.value.resetTablePagination()
+  loadRequestJobs()
+}
+
 const handlePickListModalOpen = async (mode) => {
   // Staff work in one building, so a default building is applied without asking
   if (userData.value?.default_building_id) {
@@ -1287,66 +1275,60 @@ const handlePickListModalOpen = async (mode) => {
   }
 }
 
+const buildRequestFilterParams = (qParams, pickListMode) => {
+  const filters = columnFilters.value
+  const filterParams = {
+    ...qParams,
+    // the queue leaves out fulfilled requests, which is all a Completed filter could match
+    queue: pickListMode || !filters.status?.includes('Completed'),
+    unassociated_pick_list: pickListMode
+  }
+
+  if (filters.id) {
+    filterParams.id = filters.id
+  }
+  if (filters.request_type?.length > 0) {
+    filterParams.request_type = filters.request_type
+  }
+  if (filters.barcode) {
+    filterParams.barcode_value = filters.barcode
+  }
+  if (filters.external_request_id) {
+    filterParams.external_request_id = filters.external_request_id
+  }
+  if (pickListMode) {
+    // a pick list is built for the one building chosen when it was started
+    filterParams.building_id = activePickListBuildingFilter.value
+  } else if (filters.building_id?.length > 0) {
+    filterParams.building_id = filters.building_id
+  }
+  if (filters.requestor_name) {
+    filterParams.requestor_name = filters.requestor_name
+  }
+  if (filters.status?.length > 0) {
+    filterParams.status = filters.status
+  }
+  if (filters.priority?.length > 0) {
+    filterParams.priority = filters.priority
+  }
+  if (filters.media_type?.length > 0) {
+    filterParams.media_type = filters.media_type
+  }
+  if (filters.location) {
+    filterParams.item_location = filters.location
+  }
+  if (filters.delivery_location?.length > 0) {
+    filterParams.delivery_location = filters.delivery_location
+  }
+
+  return filterParams
+}
+
 const loadRequestJobs = async (qParams) => {
   try {
     appIsLoadingData.value = true
     if (requestDisplayType.value == 'request_view') {
-      const isPickListMode = showCreatePickList.value || showAddPickList.value
-
-      // Build filter params from column filters
-      const filterParams = {
-        ...qParams,
-        queue: true,
-        unassociated_pick_list: isPickListMode ? true : false,
-        // Persist building filter during pick list mode for sorting/pagination
-        ...(isPickListMode && activePickListBuildingFilter.value ? { building_id: activePickListBuildingFilter.value } : {})
-      }
-
-      // Apply column filters (only when not in pick list mode)
-      if (!isPickListMode) {
-        if (columnFilters.value.id) {
-          filterParams.id = columnFilters.value.id
-        }
-        if (columnFilters.value.request_type && columnFilters.value.request_type.length > 0) {
-          filterParams.request_type = columnFilters.value.request_type
-        }
-        if (columnFilters.value.barcode) {
-          filterParams.barcode_value = columnFilters.value.barcode
-        }
-        if (columnFilters.value.external_request_id) {
-          filterParams.external_request_id = columnFilters.value.external_request_id
-        }
-        if (columnFilters.value.building_id && columnFilters.value.building_id.length > 0) {
-          filterParams.building_id = columnFilters.value.building_id
-        }
-        if (columnFilters.value.requestor_name) {
-          filterParams.requestor_name = columnFilters.value.requestor_name
-        }
-        if (columnFilters.value.status && columnFilters.value.status.length > 0) {
-          filterParams.status = columnFilters.value.status
-        }
-        if (columnFilters.value.priority && columnFilters.value.priority.length > 0) {
-          filterParams.priority = columnFilters.value.priority
-        }
-        if (columnFilters.value.media_type && columnFilters.value.media_type.length > 0) {
-          filterParams.media_type = columnFilters.value.media_type
-        }
-        if (columnFilters.value.location) {
-          // Convert displayed location format to database format
-          // Display uses "R" and "L", database stores "Right" and "Left"
-          let locationSearch = columnFilters.value.location
-          // Replace standalone -R- with -Right- and -L- with -Left-
-          locationSearch = locationSearch.replace(/-R-/gi, '-Right-')
-          locationSearch = locationSearch.replace(/-L-/gi, '-Left-')
-          // Handle if R or L is at the end (e.g., "M1-A2-R")
-          locationSearch = locationSearch.replace(/-R$/gi, '-Right')
-          locationSearch = locationSearch.replace(/-L$/gi, '-Left')
-          filterParams.item_location = locationSearch
-        }
-        if (columnFilters.value.delivery_location && columnFilters.value.delivery_location.length > 0) {
-          filterParams.delivery_location = columnFilters.value.delivery_location
-        }
-      }
+      const filterParams = buildRequestFilterParams(qParams, isPickListMode.value)
 
       await getRequestJobList(filterParams)
     } else {
@@ -1354,13 +1336,13 @@ const loadRequestJobs = async (qParams) => {
       const batchFilterParams = { ...qParams }
 
       if (batchColumnFilters.value.file_type) {
-        batchFilterParams.file_type = batchColumnFilters.value.file_type
+        batchFilterParams.file_type_search = batchColumnFilters.value.file_type
       }
       if (batchColumnFilters.value.status && batchColumnFilters.value.status.length > 0) {
         batchFilterParams.status = batchColumnFilters.value.status
       }
       if (batchColumnFilters.value.user_name) {
-        batchFilterParams.user_name = batchColumnFilters.value.user_name
+        batchFilterParams.user_name_search = batchColumnFilters.value.user_name
       }
 
       await getRequestBatchJobList(batchFilterParams)
@@ -1375,13 +1357,21 @@ const loadRequestJobs = async (qParams) => {
   }
 }
 
-// Apply column filters - triggers server-side filtering
+// Apply column filters - triggers server-side filtering from page 1, keeping the sort and page size
 const applyColumnFilters = () => {
-  // Reset pagination to page 1 when filters change
-  if (requestTableComponent.value) {
+  requestTableComponent.value.reloadFromFirstPage()
+}
+
+// Show a list after creating or importing requests, with the active filters still applied
+const showUpdatedList = (displayType) => {
+  if (requestDisplayType.value !== displayType) {
+    requestDisplayType.value = displayType
+    clearTableSelection()
     requestTableComponent.value.resetTablePagination()
+    loadRequestJobs()
+  } else {
+    applyColumnFilters()
   }
-  loadRequestJobs()
 }
 
 // Clear all column filters
@@ -1420,10 +1410,7 @@ const loadRequestJobsByBuilding = async (modeOverride = null) => {
     // Store the selected building filter so it persists during sorting/pagination
     activePickListBuildingFilter.value = filterRequestsByBuilding.value
 
-    await getRequestJobList({
-      building_id: filterRequestsByBuilding.value,
-      unassociated_pick_list: true
-    })
+    await getRequestJobList(buildRequestFilterParams({}, true))
 
     // display next step in picklist creation
     if (mode == 'Create') {
@@ -1495,8 +1482,6 @@ const createPickListJob = async () => {
         }
       ]
     })
-    requestTableComponent.value.resetTablePagination()
-    loadRequestJobs()
   } catch (error) {
     notify({
       type: 'negative',
@@ -1504,7 +1489,7 @@ const createPickListJob = async () => {
     })
   } finally {
     appActionIsLoadingData.value = false
-    resetPickListForm()
+    leavePickListMode()
   }
 }
 const updatePickListJob = async () => {
@@ -1529,8 +1514,6 @@ const updatePickListJob = async () => {
         }
       ]
     })
-    requestTableComponent.value.resetTablePagination()
-    loadRequestJobs()
   } catch (error) {
     notify({
       type: 'negative',
@@ -1538,7 +1521,7 @@ const updatePickListJob = async () => {
     })
   } finally {
     appActionIsLoadingData.value = false
-    resetPickListForm()
+    leavePickListMode()
   }
 }
 </script>

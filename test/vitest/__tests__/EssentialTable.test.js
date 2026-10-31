@@ -155,4 +155,39 @@ describe('Essential Table Component', () => {
 
     expect(wrapper.find('.table-component-filter').exists()).toBe(true)
   })
+
+  it('reloadFromFirstPage keeps the current sort and page size', () => {
+    const wrapper = mount(EssentialTable, {
+      props: {
+        hideTableRearrange: true,
+        enablePagination: true,
+        paginationTotal: 200,
+        tableColumns: [
+          {
+            name: 'id',
+            field: 'id',
+            label: 'ID',
+            sortable: true
+          }
+        ],
+        tableData: [{ id: 1 }]
+      }
+    })
+    wrapper.vm.paginationConfig = {
+      ...wrapper.vm.paginationConfig,
+      page: 4,
+      rowsPerPage: 100,
+      sortBy: 'id',
+      descending: true
+    }
+
+    wrapper.vm.reloadFromFirstPage()
+
+    expect(wrapper.emitted('update-pagination').at(-1)[0]).toMatchObject({
+      page: 1,
+      size: 100,
+      sort_by: 'id',
+      sort_order: 'desc'
+    })
+  })
 })
