@@ -135,9 +135,15 @@
             />
           </template>
 
-          <template #table-th="{ col }">
+          <template #header-filter-row="{ cols }">
             <q-tr class="filter-row">
-              <q-th class="filter-cell">
+              <!-- lines the filters up with their columns when the selection column is showing -->
+              <q-th v-if="showCreatePickList || showAddPickList" />
+              <q-th
+                v-for="col in cols"
+                :key="col.name"
+                class="filter-cell"
+              >
                 <!-- ID filter -->
                 <q-input
                   v-if="col.name === 'id'"
@@ -146,6 +152,7 @@
                   outlined
                   clearable
                   placeholder="Search..."
+                  aria-label="Filter by Request ID"
                   class="column-filter-input"
                   @click.stop
                 >
@@ -170,6 +177,7 @@
                   map-options
                   :options="requestTypeOptionsFromData"
                   placeholder="All"
+                  aria-label="Filter by Request Type"
                   class="column-filter-input"
                   @click.stop
                 />
@@ -182,6 +190,7 @@
                   outlined
                   clearable
                   placeholder="Search..."
+                  aria-label="Filter by Barcode"
                   class="column-filter-input"
                   @click.stop
                 >
@@ -202,6 +211,7 @@
                   outlined
                   clearable
                   placeholder="Search..."
+                  aria-label="Filter by External Request ID"
                   class="column-filter-input"
                   @click.stop
                 >
@@ -222,6 +232,7 @@
                   outlined
                   clearable
                   placeholder="Search..."
+                  aria-label="Filter by Requestor Name"
                   class="column-filter-input"
                   @click.stop
                 >
@@ -246,6 +257,7 @@
                   map-options
                   :options="statusOptionsFromData"
                   placeholder="All"
+                  aria-label="Filter by Request Status"
                   class="column-filter-input"
                   @click.stop
                 />
@@ -262,6 +274,7 @@
                   map-options
                   :options="priorityOptionsFromData"
                   placeholder="All"
+                  aria-label="Filter by Priority"
                   class="column-filter-input"
                   @click.stop
                 />
@@ -278,6 +291,7 @@
                   map-options
                   :options="mediaTypeOptionsFromData"
                   placeholder="All"
+                  aria-label="Filter by Media Type"
                   class="column-filter-input"
                   @click.stop
                 />
@@ -290,6 +304,7 @@
                   outlined
                   clearable
                   placeholder="Search..."
+                  aria-label="Filter by Item Location"
                   class="column-filter-input"
                   @click.stop
                 >
@@ -314,6 +329,7 @@
                   map-options
                   :options="deliveryLocationOptionsFromData"
                   placeholder="All"
+                  aria-label="Filter by Delivery Location"
                   class="column-filter-input"
                   @click.stop
                 />
@@ -439,6 +455,7 @@ import { api } from '@/boot/axios.js'
 import inventoryServiceApi from '@/http/InventoryService.js'
 import { useGlobalStore } from '@/stores/global-store'
 import { useOptionStore } from '@/stores/option-store'
+import { useUserStore } from '@/stores/user-store'
 import { useRequestStore } from '@/stores/request-store'
 import { usePicklistStore } from '@/stores/picklist-store'
 import { storeToRefs } from 'pinia'
@@ -464,6 +481,7 @@ const { requestBatchJob } = storeToRefs(useRequestStore())
 const { getRequestBatchJob, getRequestJob } = useRequestStore()
 const { postPicklistJob, patchPicklistJobItem } = usePicklistStore()
 const { picklistJob } = storeToRefs(usePicklistStore())
+const { userData } = storeToRefs(useUserStore())
 
 // Local Data
 const requestJobMenuState = ref(false)
@@ -575,10 +593,13 @@ const columnFilters = ref({
   delivery_location: []
 })
 
+// Deleted requests stay on the batch but aren't part of it any more, as on the dashboard
+const batchRequests = computed(() => (requestBatchJob.value.requests || []).filter(r => !r.deleted))
+
 // Dynamic filter options from current data
 const requestTypeOptionsFromData = computed(() => {
   const types = new Set()
-  requestBatchJob.value.requests?.forEach(row => {
+  batchRequests.value.forEach(row => {
     if (row.request_type?.type) {
       types.add(row.request_type.type)
     }
@@ -591,7 +612,7 @@ const requestTypeOptionsFromData = computed(() => {
 
 const statusOptionsFromData = computed(() => {
   const statuses = new Set()
-  requestBatchJob.value.requests?.forEach(row => {
+  batchRequests.value.forEach(row => {
     if (row.status) {
       statuses.add(row.status)
     }
@@ -604,7 +625,7 @@ const statusOptionsFromData = computed(() => {
 
 const priorityOptionsFromData = computed(() => {
   const priorities = new Set()
-  requestBatchJob.value.requests?.forEach(row => {
+  batchRequests.value.forEach(row => {
     if (row.priority?.value) {
       priorities.add(row.priority.value)
     }
@@ -617,7 +638,7 @@ const priorityOptionsFromData = computed(() => {
 
 const mediaTypeOptionsFromData = computed(() => {
   const types = new Set()
-  requestBatchJob.value.requests?.forEach(row => {
+  batchRequests.value.forEach(row => {
     const type = row.item?.media_type?.name || row.non_tray_item?.media_type?.name
     if (type) {
       types.add(type)
@@ -631,7 +652,7 @@ const mediaTypeOptionsFromData = computed(() => {
 
 const deliveryLocationOptionsFromData = computed(() => {
   const locations = new Set()
-  requestBatchJob.value.requests?.forEach(row => {
+  batchRequests.value.forEach(row => {
     if (row.delivery_location?.name) {
       locations.add(row.delivery_location.name)
     }
@@ -643,7 +664,7 @@ const deliveryLocationOptionsFromData = computed(() => {
 })
 
 const requestItems = computed(() => {
-  let requests = requestBatchJob.value.requests || []
+  let requests = batchRequests.value
 
   // Filter out any requests that already belong to a picklist
   if (showCreatePickList.value || showAddPickList.value) {
@@ -709,7 +730,7 @@ const renderItemBarcodeDisplay = inject('render-item-barcode-display')
 const headerSubtitle = computed(() => {
   const source = requestBatchJob.value.file_type || '-'
   const fileName = requestBatchJob.value.file_name || '-'
-  const items = `${requestBatchJob.value.requests?.length || 0} items`
+  const items = `${batchRequests.value.length} items`
   const user = requestBatchJob.value.user ? `${requestBatchJob.value.user.first_name} ${requestBatchJob.value.user.last_name}` : 'Unassigned'
   const date = requestBatchJob.value.create_dt ? formatDateTime(requestBatchJob.value.create_dt).date : '-'
   return `${source} • ${fileName} • ${items} • ${user} • ${date}`
@@ -838,7 +859,8 @@ const createPickListJob = async () => {
   try {
     appActionIsLoadingData.value = true
     const payload = {
-      request_ids: selectedRequestItems.value.map(item => item.id)
+      request_ids: selectedRequestItems.value.map(item => item.id),
+      created_by_id: userData.value.user_id
     }
     await postPicklistJob(payload)
 

@@ -405,4 +405,96 @@ describe('RequestBatchJobDetails', () => {
       })
     })
   })
+
+  describe('filters and sorting', () => {
+    const requests = [
+      {
+        id: 2,
+        status: 'New',
+        requestor_name: 'Smith',
+        request_type: { type: 'Scan' },
+        item: { barcode: { value: 'B' } }
+      },
+      {
+        id: 1,
+        status: 'PickList',
+        requestor_name: 'Jones',
+        request_type: { type: 'General' },
+        item: { barcode: { value: 'A' } }
+      },
+      {
+        id: 3,
+        status: 'New',
+        deleted: true,
+        requestor_name: 'Gone',
+        item: { barcode: { value: 'C' } }
+      }
+    ]
+
+    const mountDetails = async () => {
+      useRequestStore().requestBatchJob = {
+        id: 7,
+        requests
+      }
+      wrapper = mount(RequestBatchJobDetails, {
+        global: {
+          // the quasar mock above has no $q.platform, which real buttons read
+          stubs: {
+            JobPageHeader: true,
+            BaseButton: true
+          },
+          provide: {
+            'format-date-time': vi.fn().mockReturnValue({ date: 'N/A' }),
+            'get-item-location': vi.fn().mockReturnValue('N/A'),
+            'render-item-barcode-display': vi.fn(item => item?.barcode?.value ?? '')
+          }
+        }
+      })
+      await flushPromises()
+    }
+
+    const firstCellOfEachRow = () => wrapper.findAll('tbody tr').map(row => row.find('td').text())
+
+    it('renders a filter input for the visible columns', async () => {
+      await mountDetails()
+      expect(wrapper.find('.filter-row').exists()).toBe(true)
+      expect(wrapper.find('input[aria-label="Filter by Requestor Name"]').exists()).toBe(true)
+    })
+
+    it('filters rows as a filter changes', async () => {
+      await mountDetails()
+      await wrapper.find('input[aria-label="Filter by Requestor Name"]').setValue('smi')
+      await flushPromises()
+      expect(firstCellOfEachRow()).toEqual(['2'])
+    })
+
+    it('leaves out deleted requests', async () => {
+      await mountDetails()
+      expect(wrapper.vm.requestItems.map(r => r.id)).toEqual([
+        2,
+        1
+      ])
+      expect(wrapper.vm.statusOptionsFromData.map(o => o.value)).toEqual([
+        'New',
+        'PickList'
+      ])
+    })
+
+    it('sorts by a clicked column, ascending then descending', async () => {
+      await mountDetails()
+      const header = wrapper.find('[aria-label="Requestor NameTableColumnSortAscendDescend"]')
+      await header.trigger('click')
+      await flushPromises()
+      expect(firstCellOfEachRow()).toEqual([
+        '1',
+        '2'
+      ])
+      await header.trigger('click')
+      await flushPromises()
+      expect(firstCellOfEachRow()).toEqual([
+        '2',
+        '1'
+      ])
+    })
+  })
 })
