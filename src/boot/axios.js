@@ -13,6 +13,7 @@ const api = axios.create({
   paramsSerializer: (queryParams) => {
     // this will process param arrays as multiple entries in get request queryParams params and also removes null query params as well
     // ex: owner_id: [1,2] => owner_id=1&owner_id=2
+    // values are encoded so characters like & + # % in a name or search stay part of the value
     for (const key of Object.keys(queryParams)) {
       if (queryParams[key] === null) {
         delete queryParams[key]
@@ -21,7 +22,9 @@ const api = axios.create({
     return Object.entries(queryParams).map(([
       key,
       value
-    ]) => Array.isArray(value) ? `${key}=${value.join('&' + key + '=')}` : `${key}=${value}`).join('&')
+    ]) => Array.isArray(value)
+      ? value.map(item => `${key}=${encodeURIComponent(item)}`).join('&')
+      : `${key}=${encodeURIComponent(value)}`).join('&')
   }
 })
 
