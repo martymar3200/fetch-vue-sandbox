@@ -5,10 +5,12 @@ const serialize = (params) => api.defaults.paramsSerializer(params)
 
 describe('axios paramsSerializer', () => {
   it('repeats the key for array values', () => {
-    expect(serialize({ owner_id: [
-      1,
-      2
-    ] })).toBe('owner_id=1&owner_id=2')
+    expect(serialize({
+      owner_id: [
+        1,
+        2
+      ]
+    })).toBe('owner_id=1&owner_id=2')
   })
 
   it('drops null values', () => {
