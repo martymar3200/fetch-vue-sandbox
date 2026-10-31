@@ -1161,6 +1161,71 @@ const generateReportModal = () => {
         }
       ]
       break
+    case 'Move History':
+      reportForm.value = {
+        from_dt: null,
+        to_dt: null,
+        barcode_value: null,
+        shelving_job_id: null,
+        container_type: null,
+        moved_by_user_id: null,
+        owner_id: null
+      }
+      reportParams.value = [
+        {
+          query: 'from_dt',
+          label: 'Date (From)'
+        },
+        {
+          query: 'to_dt',
+          label: 'Date (To)'
+        },
+        {
+          type: 'text',
+          query: 'barcode_value',
+          label: 'Barcode'
+        },
+        {
+          type: 'text',
+          query: 'shelving_job_id',
+          label: 'Job Number'
+        },
+        {
+          query: 'container_type',
+          label: 'Container Type',
+          options: [
+            {
+              label: 'Tray',
+              value: 'Tray'
+            },
+            {
+              label: 'Non-Tray',
+              value: 'Non-Tray'
+            },
+            {
+              label: 'Item',
+              value: 'Item'
+            }
+          ],
+          optionValue: 'value',
+          optionLabel: 'label'
+        },
+        {
+          query: 'moved_by_user_id',
+          multiple: true,
+          label: 'Moved By',
+          options: users,
+          optionType: 'users'
+        },
+        {
+          query: 'owner_id',
+          multiple: true,
+          label: 'Owner',
+          options: owners,
+          optionType: 'owners'
+        }
+      ]
+      break
     case 'Total Item Retrieved':
       reportForm.value = {
         from_dt: null,

@@ -619,6 +619,12 @@ const reportItems = ref([
     category: 'audit'
   },
   {
+    id: 'Move History',
+    label: 'Move History',
+    description: 'Where trays, non-tray items and items were moved from and to',
+    category: 'audit'
+  },
+  {
     id: 'Verification Status',
     label: 'Verification Status',
     description: 'Verified trays and items by date',
@@ -1524,6 +1530,86 @@ const generateReportTableFields = (qParams) => {
         'original_assigned_location',
         'current_assigned_location',
         'error'
+      ]
+      break
+    case 'Move History':
+      generatedTableColumns.value = [
+        {
+          name: 'shelved_dt',
+          field: 'shelved_dt',
+          label: 'Move Date',
+          align: 'left',
+          sortable: true
+        },
+        {
+          name: 'barcode_value',
+          field: 'barcode_value',
+          label: 'Barcode',
+          align: 'left'
+        },
+        {
+          name: 'container_type',
+          field: 'container_type',
+          label: 'Type',
+          align: 'left'
+        },
+        {
+          name: 'source_tray_barcode',
+          field: 'source_tray_barcode',
+          label: 'From Tray',
+          align: 'left',
+          sortable: true
+        },
+        {
+          name: 'original_location',
+          field: 'original_location',
+          label: 'From Location',
+          align: 'left',
+          sortable: true
+        },
+        {
+          name: 'destination_tray_barcode',
+          field: 'destination_tray_barcode',
+          label: 'To Tray',
+          align: 'left'
+        },
+        {
+          name: 'destination_location',
+          field: 'destination_location',
+          label: 'To Location',
+          align: 'left'
+        },
+        {
+          name: 'shelving_job_id',
+          field: 'shelving_job_id',
+          label: 'Job Number',
+          align: 'left',
+          sortable: true
+        },
+        {
+          name: 'moved_by',
+          field: 'moved_by',
+          label: 'Moved By',
+          align: 'left'
+        },
+        {
+          name: 'owner',
+          field: 'owner',
+          label: 'Owner',
+          align: 'left'
+        }
+      ]
+      generatedTableVisibleColumns.value = [
+        'shelved_dt',
+        'barcode_value',
+        'container_type',
+        'source_tray_barcode',
+        'original_location',
+        'destination_tray_barcode',
+        'destination_location',
+        'shelving_job_id',
+        'moved_by',
+        'owner'
       ]
       break
     case 'Total Item Retrieved':
