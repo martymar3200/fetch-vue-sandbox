@@ -12,8 +12,8 @@
             {
               text: 'Delete Request',
               optionClass: 'text-negative',
-              disabled: requestJob.status == 'PickList' || requestJob.status == 'Completed' || requestJob.deleted,
-              tooltip: requestJob.deleted ? 'Request is already deleted' : ((requestJob.status == 'PickList' || requestJob.status == 'Completed') ? 'Cannot delete active request' : null),
+              disabled: requestJob.status == 'PickList' || requestJob.status == 'Retrieved' || requestJob.status == 'Completed' || requestJob.deleted,
+              tooltip: requestJob.deleted ? 'Request is already deleted' : ((requestJob.status == 'PickList' || requestJob.status == 'Retrieved' || requestJob.status == 'Completed') ? 'Cannot delete active request' : null),
               hidden: !checkUserPermission('can_delete_request')
             },
           ]"
