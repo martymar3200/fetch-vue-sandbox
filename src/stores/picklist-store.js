@@ -157,6 +157,7 @@ export const usePicklistStore = defineStore('picklist-store', {
               } else if (requestObj.non_tray_item) {
                 requestObj.non_tray_item.status = payload.status
               }
+              requestObj.fulfilled = true
               // Move the item to the bottom of the list
               this.picklistJob.requests.splice(index, 1)
               this.picklistJob.requests.push(requestObj)
@@ -169,12 +170,47 @@ export const usePicklistStore = defineStore('picklist-store', {
           }
         })
         if (res.fromServer) {
-          this.picklistJob = res.data
-          this.originalPicklistJob = { ...this.picklistJob }
+          await this.applyPicklistScanResult(res.data)
         }
       } catch (error) {
         throw error
       }
+    },
+    // A scan only returns each request's state, which also carries colleagues' scans on a shared job.
+    // Requests keep their walking order from the last full load, with retrieved ones after the rest.
+    async applyPicklistScanResult (result) {
+      const latest = new Map(result.requests.map(request => [
+        request.id,
+        request
+      ]))
+      const requests = this.picklistJob.requests
+
+      if (requests.length !== latest.size || requests.some(request => !latest.has(request.id))) {
+        // a colleague added or removed an item, so only a full load has its details and place in the order
+        try {
+          await this.getPicklistJob(this.picklistJob.id)
+        } catch (error) {
+          // the scan itself saved, and the next scan tries this again
+          console.warn('Failed to reload pick list after scan', error)
+        }
+        return
+      }
+
+      requests.forEach(request => {
+        const { fulfilled, item_status: itemStatus } = latest.get(request.id)
+        request.fulfilled = fulfilled
+        if (request.item) {
+          request.item.status = itemStatus
+        } else if (request.non_tray_item) {
+          request.non_tray_item.status = itemStatus
+        }
+      })
+      this.picklistJob.status = result.status
+      this.picklistJob.requests = [
+        ...requests.filter(request => !request.fulfilled),
+        ...requests.filter(request => request.fulfilled)
+      ]
+      this.originalPicklistJob = { ...this.picklistJob }
     },
     async deletePicklistJobItem (itemId) {
       const { offlineAwareRequest } = useOfflineSync()
