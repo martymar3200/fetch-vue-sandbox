@@ -463,6 +463,7 @@ const filter = ref('all')
 const barcodeInput = ref('')
 const actionLoading = ref(false)
 const scanning = ref(false)
+let savingBarcode = null
 const shippingEnabled = ref(false)
 const showCompleteDialog = ref(false)
 const showCancelDialog = ref(false)
@@ -670,11 +671,23 @@ const handleManualScan = () => {
 }
 
 const processScan = async (barcode) => {
-  if (!barcode || job.value?.status !== 'Running' || scanning.value) {
+  if (!barcode || job.value?.status !== 'Running') {
+    return
+  }
+
+  if (scanning.value) {
+    // the same barcode again is a double read of the scan already saving
+    if (barcode !== savingBarcode) {
+      notify({
+        type: 'warning',
+        message: `Still saving the last scan. Please scan ${barcode} again.`
+      })
+    }
     return
   }
 
   scanning.value = true
+  savingBarcode = barcode
   const item = picklistItems.value.find(itm =>
     (itm.item?.barcode?.value === barcode) || (itm.non_tray_item?.barcode?.value === barcode)
   )

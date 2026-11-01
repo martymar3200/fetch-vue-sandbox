@@ -138,6 +138,42 @@ describe('PicklistExecute', () => {
     }))
   })
 
+  describe('a scan arriving while another is saving', () => {
+    const scanWhileSaving = async (barcode) => {
+      let finishSaving
+      usePicklistStore().patchPicklistJobItemScanned.mockReturnValue(new Promise((resolve) => {
+        finishSaving = resolve
+      }))
+      mountPage()
+      await flushPromises()
+      compiledBarCode.value = BARCODE
+      await flushPromises()
+      compiledBarCode.value = ''
+      await flushPromises()
+      compiledBarCode.value = barcode
+      await flushPromises()
+      finishSaving()
+      await flushPromises()
+    }
+
+    it('asks for a different item to be scanned again', async () => {
+      await scanWhileSaving('ITEM-2')
+
+      expect(usePicklistStore().patchPicklistJobItemScanned).toHaveBeenCalledTimes(1)
+      expect(notify).toHaveBeenCalledWith(expect.objectContaining({
+        type: 'warning',
+        message: expect.stringContaining('ITEM-2')
+      }))
+    })
+
+    it('stays quiet about a double read of the same item', async () => {
+      await scanWhileSaving(BARCODE)
+
+      expect(usePicklistStore().patchPicklistJobItemScanned).toHaveBeenCalledTimes(1)
+      expect(notify).not.toHaveBeenCalledWith(expect.objectContaining({ type: 'warning' }))
+    })
+  })
+
   it.each([
     [
       'Running',
