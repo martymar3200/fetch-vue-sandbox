@@ -286,8 +286,8 @@
                 size="sm"
                 :options="[
                   { label: 'All', value: 'all' },
-                  { label: 'Pending', value: 'PickList' },
-                  { label: 'Retrieved', value: 'Out' }
+                  { label: 'Pending', value: 'pending' },
+                  { label: 'Retrieved', value: 'retrieved' }
                 ]"
               />
             </div>
@@ -320,7 +320,7 @@
                 class="text-center"
               >
                 <q-chip
-                  v-if="props.row.status !== 'PickList'"
+                  v-if="props.row.retrieved"
                   color="positive"
                   text-color="white"
                   icon="check_circle"
@@ -343,7 +343,7 @@
                 class="text-right"
               >
                 <BaseButton
-                  v-if="props.row.status === 'PickList' && job?.status !== 'Completed'"
+                  v-if="!props.row.retrieved"
                   flat
                   round
                   dense
@@ -481,7 +481,7 @@ const getItemLocation = inject('get-item-location')
 
 // Computed
 const totalCount = computed(() => picklistItems.value.length)
-const retrievedCount = computed(() => picklistItems.value.filter(i => i.status !== 'PickList').length)
+const retrievedCount = computed(() => picklistItems.value.filter(i => i.retrieved).length)
 const subtitle = computed(() => {
   const parts = []
   if (job.value?.building?.name) {
@@ -495,11 +495,11 @@ const filteredItems = computed(() => {
   if (filter.value === 'all') {
     return picklistItems.value
   }
-  return picklistItems.value.filter(i => i.status === filter.value)
+  return picklistItems.value.filter(i => i.retrieved === (filter.value === 'retrieved'))
 })
 
 const currentTarget = computed(() => {
-  return picklistItems.value.find(i => i.status === 'PickList')
+  return picklistItems.value.find(i => !i.retrieved)
 })
 
 const menuOptions = computed(() => [
@@ -702,7 +702,7 @@ const processScan = async (barcode) => {
     return
   }
 
-  if (item.status !== 'PickList') {
+  if (item.retrieved) {
     notify({
       type: 'warning',
       message: 'Item already retrieved'
@@ -720,8 +720,6 @@ const processScan = async (barcode) => {
       status: 'Out'
     })
 
-    // Update local state for immediate feedback
-    item.status = 'Out'
     barcodeInput.value = ''
     saveState()
 

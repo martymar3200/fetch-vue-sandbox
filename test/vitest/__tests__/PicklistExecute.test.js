@@ -46,13 +46,14 @@ vi.mock('@/utils/notify', () => ({
 const BARCODE = 'ITEM-1'
 
 const mounted = []
-const mountPage = (status = 'Running', itemStatus = 'PickList') => {
+const mountPage = (status = 'Running', itemStatus = 'PickList', fulfilled = itemStatus !== 'PickList') => {
   usePicklistStore().picklistJob = {
     id: 5,
     status,
     requests: [
       {
         id: 11,
+        fulfilled,
         item: {
           status: itemStatus,
           barcode: { value: BARCODE }
@@ -136,6 +137,54 @@ describe('PicklistExecute', () => {
     expect(notify).toHaveBeenCalledWith(expect.objectContaining({
       message: 'Failed to complete job'
     }))
+  })
+
+  describe('retrieved state comes from the request, not the item\'s current status', () => {
+    const shown = wrapper => wrapper.text()
+
+    it('shows a completed job as retrieved after its item was picked again on a later job', async () => {
+      const wrapper = mountPage('Completed', 'PickList', true)
+      await flushPromises()
+
+      expect(shown(wrapper)).toContain('1/1')
+      expect(wrapper.find('.q-chip').text()).toContain('Retrieved')
+    })
+
+    it('shows a completed job as retrieved with shipping on, where requests stay unfulfilled', async () => {
+      const wrapper = mountPage('Completed', 'Retrieved', false)
+      await flushPromises()
+
+      expect(shown(wrapper)).toContain('1/1')
+    })
+
+    it('still lists an item under the Retrieved filter once it has moved past Out', async () => {
+      const wrapper = mountPage('Completed', 'In', true)
+      await flushPromises()
+
+      wrapper.findComponent({ name: 'QBtnToggle' }).vm.$emit('update:modelValue', 'retrieved')
+      await flushPromises()
+
+      expect(wrapper.find('.q-chip').text()).toContain('Retrieved')
+    })
+
+    it('treats an unfulfilled item on a running job as pending whatever its status', async () => {
+      const wrapper = mountPage('Running', 'Requested', false)
+      await flushPromises()
+
+      expect(shown(wrapper)).toContain('0/1')
+      expect(wrapper.text()).toContain('CURRENT TARGET')
+    })
+
+    it('blocks a repeat scan of an item this job already retrieved', async () => {
+      mountPage('Running', 'Out', true)
+      await flushPromises()
+
+      compiledBarCode.value = BARCODE
+      await flushPromises()
+
+      expect(usePicklistStore().patchPicklistJobItemScanned).not.toHaveBeenCalled()
+      expect(notify).toHaveBeenCalledWith(expect.objectContaining({ message: 'Item already retrieved' }))
+    })
   })
 
   describe('a scan arriving while another is saving', () => {

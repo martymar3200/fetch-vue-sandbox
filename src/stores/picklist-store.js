@@ -30,7 +30,10 @@ export const usePicklistStore = defineStore('picklist-store', {
         items = state.picklistJob.requests.map(rq => {
           return {
             ...rq,
-            status: rq.item ? rq.item.status : rq.non_tray_item.status
+            status: rq.item ? rq.item.status : rq.non_tray_item.status,
+            // from the request, not the item: the item moves on after this job, and may even be picked again.
+            // A Completed job counts too because with shipping on, its requests stay unfulfilled until they ship.
+            retrieved: !!rq.fulfilled || state.picklistJob.status === 'Completed'
           }
         })
       }
@@ -39,7 +42,7 @@ export const usePicklistStore = defineStore('picklist-store', {
     allItemsRetrieved: (state) => {
       if (state.picklistJob.id && state.picklistJob.status !== 'Created') {
         // when a picklist job is active we can keep track of if all requested items have been pulled/retrieved using status
-        return state.picklistItems.length == 0 || state.picklistItems.some(itm => itm.status == 'PickList') ? false : true
+        return state.picklistItems.length == 0 || state.picklistItems.some(itm => !itm.retrieved) ? false : true
       } else {
         return true
       }
