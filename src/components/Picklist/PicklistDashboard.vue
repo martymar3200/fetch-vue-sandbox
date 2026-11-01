@@ -75,6 +75,8 @@
                   dense
                   outlined
                   clearable
+                  mask="##########"
+                  inputmode="numeric"
                   placeholder="Search..."
                   class="column-filter-input"
                   debounce="400"
@@ -100,7 +102,7 @@
                   multiple
                   emit-value
                   map-options
-                  :options="buildingOptionsFromData.length > 0 ? buildingOptionsFromData : buildingOptions"
+                  :options="buildingOptions"
                   placeholder="All"
                   class="column-filter-input"
                   @update:model-value="applyColumnFilters"
@@ -117,7 +119,7 @@
                   multiple
                   emit-value
                   map-options
-                  :options="statusOptionsFromData.length > 0 ? statusOptionsFromData : picklistStatusOptions"
+                  :options="picklistStatusOptions"
                   placeholder="All"
                   class="column-filter-input"
                   @update:model-value="applyColumnFilters"
@@ -134,7 +136,7 @@
                   multiple
                   emit-value
                   map-options
-                  :options="userOptionsFromData.length > 0 ? userOptionsFromData : userOptions"
+                  :options="userOptions"
                   placeholder="All"
                   class="column-filter-input"
                   @update:model-value="applyColumnFilters"
@@ -165,7 +167,7 @@
             <span v-else-if="colName == 'create_dt'">
               {{ formatDateTime(value).date }}
             </span>
-            <span v-else-if="colName == 'last_transition'">
+            <span v-else-if="colName == 'update_dt'">
               {{ formatDateTime(value).date }}
             </span>
           </template>
@@ -183,17 +185,14 @@ import { notify } from '@/utils/notify'
 import { useGlobalStore } from '@/stores/global-store'
 import { useOptionStore } from '@/stores/option-store'
 import { usePicklistStore } from '@/stores/picklist-store'
-import { useUserStore } from '@/stores/user-store'
 import { storeToRefs } from 'pinia'
 import { useCurrentScreenSize } from '@/composables/useCurrentScreenSize.js'
-import { usePermissionHandler } from '@/composables/usePermissionHandler.js'
 import EssentialTable from '@/components/EssentialTable.vue'
 
 const router = useRouter()
 
 // Composables
 const { currentScreenSize } = useCurrentScreenSize()
-const { checkUserPermission } = usePermissionHandler()
 
 // Store Data
 const { appIsLoadingData } = storeToRefs(useGlobalStore())
@@ -201,13 +200,13 @@ const {
   buildings,
   users
 } = storeToRefs(useOptionStore())
+const { getOptions } = useOptionStore()
 const {
   resetPicklistStore,
   getPicklistJobList,
   getPicklistJob
 } = usePicklistStore()
 const { picklistJobList, picklistJobListTotal } = storeToRefs(usePicklistStore())
-const { userData } = storeToRefs(useUserStore())
 
 // Filter State
 const showFilterRow = ref(false)
@@ -250,55 +249,7 @@ const picklistStatusOptions = [
   }
 ]
 
-// Dynamic filter options from current table data
-const buildingOptionsFromData = computed(() => {
-  const buildingSet = new Set()
-  picklistJobList.value.forEach(row => {
-    if (row.building?.id && row.building?.name) {
-      buildingSet.add(JSON.stringify({
-        id: row.building.id,
-        name: row.building.name
-      }))
-    }
-  })
-  return Array.from(buildingSet).map(b => {
-    const parsed = JSON.parse(b)
-    return {
-      label: parsed.name,
-      value: parsed.name
-    }
-  }).sort((a, b) => a.label.localeCompare(b.label))
-})
-
-const statusOptionsFromData = computed(() => {
-  const statuses = new Set()
-  picklistJobList.value.forEach(row => {
-    if (row.status) {
-      statuses.add(row.status)
-    }
-  })
-  return Array.from(statuses).sort().map(s => ({
-    label: s,
-    value: s
-  }))
-})
-
-const userOptionsFromData = computed(() => {
-  const userSet = new Set()
-  picklistJobList.value.forEach(row => {
-    if (row.assigned_user?.name) {
-      userSet.add(row.assigned_user.name)
-    } else if (row.assigned_user?.first_name) {
-      userSet.add(`${row.assigned_user.first_name} ${row.assigned_user.last_name}`)
-    }
-  })
-  return Array.from(userSet).sort().map(u => ({
-    label: u,
-    value: u
-  }))
-})
-
-// Fallback options from store data
+// Filter options from the full lists: the table only holds one page of filtered results
 const buildingOptions = computed(() =>
   buildings.value.map(b => ({
     label: b.name,
@@ -356,7 +307,7 @@ const picklistTableVisibleColumns = ref([
   'status',
   'assigned_user_id',
   'create_dt',
-  'last_transition'
+  'update_dt'
 ])
 const picklistTableColumns = ref([
   {
@@ -407,8 +358,8 @@ const picklistTableColumns = ref([
     sortable: true
   },
   {
-    name: 'last_transition',
-    field: 'last_transition',
+    name: 'update_dt',
+    field: 'update_dt',
     label: 'Last Updated',
     align: 'left',
     sortable: true
@@ -422,6 +373,7 @@ const formatDateTime = inject('format-date-time')
 onBeforeMount(() => {
   resetPicklistStore()
   loadPicklistJobs()
+  loadFilterOptions()
 
   if (currentScreenSize.value == 'xs') {
     picklistTableVisibleColumns.value = [
@@ -438,14 +390,11 @@ const loadPicklistJobs = async (qParams) => {
     appIsLoadingData.value = true
 
     // Build filter params
-    const filterParams = {
-      ...qParams,
-      user_id: checkUserPermission('can_view_all_picklist_jobs') ? null : userData.value.user_id
-    }
+    const filterParams = { ...qParams }
 
     // Apply column filters
     if (columnFilters.value.id) {
-      filterParams.id = columnFilters.value.id
+      filterParams.workflow_id = columnFilters.value.id
     }
     if (columnFilters.value.building_name && columnFilters.value.building_name.length > 0) {
       filterParams.building_name = columnFilters.value.building_name
@@ -468,12 +417,26 @@ const loadPicklistJobs = async (qParams) => {
   }
 }
 
-// Apply column filters - triggers server-side filtering
-const applyColumnFilters = () => {
-  if (picklistTableComponent.value) {
-    picklistTableComponent.value.resetTablePagination()
+const loadFilterOptions = async () => {
+  try {
+    await Promise.all([
+      getOptions('buildings', { sort_by: 'name' }),
+      getOptions('users', {
+        sort_by: 'name',
+        size: 100
+      })
+    ])
+  } catch (error) {
+    notify({
+      type: 'negative',
+      message: error.response?.data?.detail || error.message || 'Failed to load filter options'
+    })
   }
-  loadPicklistJobs()
+}
+
+// Apply column filters - triggers server-side filtering, keeping the current sort
+const applyColumnFilters = () => {
+  picklistTableComponent.value?.reloadFromFirstPage()
 }
 
 // Clear all column filters
