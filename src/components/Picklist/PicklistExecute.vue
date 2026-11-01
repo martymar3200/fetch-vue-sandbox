@@ -410,7 +410,7 @@
       @button-one-click="job?.status === 'Created' || job?.status === 'Assigned' ? startJob() : (job?.status === 'Running' ? pauseJob() : resumeJob())"
       button-two-color="positive"
       :button-two-label="job?.status === 'Created' || job?.status === 'Assigned' ? '' : 'Complete Job'"
-      :button-two-disabled="!allItemsRetrieved"
+      :button-two-disabled="!allItemsRetrieved || job?.status !== 'Running'"
       :button-two-loading="actionLoading"
       @button-two-click="showCompleteDialog = true"
     />
@@ -604,7 +604,7 @@ const startJob = async () => {
   } catch (error) {
     notify({
       type: 'negative',
-      message: 'Failed to start job'
+      message: error.response?.data?.detail || error.message || 'Failed to start job'
     })
   } finally {
     actionLoading.value = false
@@ -623,7 +623,7 @@ const pauseJob = async () => {
   } catch (error) {
     notify({
       type: 'negative',
-      message: 'Failed to pause job'
+      message: error.response?.data?.detail || error.message || 'Failed to pause job'
     })
   } finally {
     actionLoading.value = false
@@ -642,7 +642,7 @@ const resumeJob = async () => {
   } catch (error) {
     notify({
       type: 'negative',
-      message: 'Failed to resume job'
+      message: error.response?.data?.detail || error.message || 'Failed to resume job'
     })
   } finally {
     actionLoading.value = false
@@ -721,7 +721,7 @@ const processScan = async (barcode) => {
   } catch (error) {
     notify({
       type: 'negative',
-      message: 'Failed to update item'
+      message: error.response?.data?.detail || error.message || 'Failed to update item'
     })
   } finally {
     scanning.value = false
@@ -740,7 +740,7 @@ const revertItem = async (row) => {
   } catch (error) {
     notify({
       type: 'negative',
-      message: 'Failed to revert item'
+      message: error.response?.data?.detail || error.message || 'Failed to revert item'
     })
   }
 }
@@ -761,7 +761,7 @@ const completeJob = async (print) => {
   } catch (error) {
     notify({
       type: 'negative',
-      message: 'Failed to complete job'
+      message: error.response?.data?.detail || error.message || 'Failed to complete job'
     })
   } finally {
     actionLoading.value = false
@@ -803,7 +803,7 @@ const cancelJob = async () => {
   } catch (error) {
     notify({
       type: 'negative',
-      message: 'Failed to cancel job'
+      message: error.response?.data?.detail || error.message || 'Failed to cancel job'
     })
   } finally {
     actionLoading.value = false
