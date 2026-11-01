@@ -384,17 +384,23 @@ const createRequestJob = async (isNext = false) => {
         type: 'negative',
         message: error.response?.data?.detail || error.message || 'Failed to create request'
       })
-    } else if (error.response.status == 400) {
+    } else if (error.response?.status == 400 && error.response.headers?.['content-type']?.includes('text/csv')) {
       notify({
         type: 'negative',
         message: 'Batch request upload failed with errors. See downloaded error report.'
       })
       handleCSVDownload(error.response.data, 'Bulk_Request_Errors')
+      // the rejected file is now a Failed batch in the list
+      emit('changeDisplay', 'batch_view')
     } else {
+      // a 400 here means the file itself couldn't be used, so no batch was created
       notify({
         type: 'negative',
         message: error.response?.data?.detail || error.message || 'Failed to upload batch requests'
       })
+      if (error.response?.status >= 500) {
+        emit('changeDisplay', 'batch_view')
+      }
     }
   } finally {
     appActionIsLoadingData.value = false

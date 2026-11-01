@@ -136,7 +136,11 @@ describe('RequestCreateEditModal component', () => {
     it('if not manual type, and 400 error on request', async () => {
       const requestStore = useRequestStore()
       vi.spyOn(requestStore, 'postRequestBatchJob').mockRejectedValue({
-        response: { status: 400 }
+        response: {
+          status: 400,
+          headers: { 'content-type': 'text/csv; charset=utf-8' },
+          data: 'Line Item,Item Barcode,Error'
+        }
       })
 
       const mockHandleCSVDownload = vi.fn()
@@ -158,6 +162,47 @@ describe('RequestCreateEditModal component', () => {
 
       expect(wrapper.vm.appActionIsLoadingData).toBe(false)
       expect(mockHandleCSVDownload).toHaveBeenCalled()
+      expect(wrapper.emitted('changeDisplay')).toEqual([['batch_view']])
+    })
+
+    it.each([
+      [
+        400,
+        'The file is empty.',
+        undefined
+      ],
+      [
+        500,
+        'The file could not be imported.',
+        [['batch_view']]
+      ]
+    ])('shows the message for a %i JSON error and downloads nothing', async (statusCode, detail, emitted) => {
+      const requestStore = useRequestStore()
+      vi.spyOn(requestStore, 'postRequestBatchJob').mockRejectedValue({
+        response: {
+          status: statusCode,
+          headers: { 'content-type': 'application/json' },
+          data: { detail }
+        }
+      })
+      const mockHandleCSVDownload = vi.fn()
+
+      wrapper = mount(RequestCreateEditModal, {
+        global: {
+          provide: { 'handle-csv-download': mockHandleCSVDownload }
+        },
+        props: { type: 'bulk' }
+      })
+      wrapper.vm.requestFile = [{ file: '123' }]
+
+      await wrapper.vm.createRequestJob()
+
+      expect(mockHandleCSVDownload).not.toHaveBeenCalled()
+      expect(notify).toHaveBeenCalledWith(expect.objectContaining({
+        type: 'negative',
+        message: detail
+      }))
+      expect(wrapper.emitted('changeDisplay')).toEqual(emitted)
     })
 
     it('if not manual type, and 401 error on request', async () => {
