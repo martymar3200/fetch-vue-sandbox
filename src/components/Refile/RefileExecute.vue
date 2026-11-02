@@ -698,15 +698,27 @@ const cancelRefileJobEdits = () => {
 }
 
 const revertSelectedItemsToQueue = async () => {
+  // refiled items are already back on the shelf, so only pending ones return to the queue
+  const pendingItems = selectedItems.value.filter(item => item.status !== 'In')
+  const skippedCount = selectedItems.value.length - pendingItems.length
   try {
     actionLoading.value = true
+    if (pendingItems.length == 0) {
+      notify({
+        type: 'warning',
+        message: 'Refiled items stay in the job and can not be reverted to the queue.'
+      })
+      return
+    }
     const payload = {
-      barcode_values: selectedItems.value.map(item => item.barcode?.value)
+      barcode_values: pendingItems.map(item => item.barcode?.value)
     }
     await refileStore.deleteRefileJobItems(payload)
     notify({
       type: 'info',
-      message: 'Items reverted to queue'
+      message: skippedCount == 0
+        ? 'Items reverted to queue'
+        : `Reverted ${pendingItems.length} ${pendingItems.length == 1 ? 'item' : 'items'} to the queue. ${skippedCount} refiled ${skippedCount == 1 ? 'item stays' : 'items stay'} in the job.`
     })
   } catch (error) {
     notify({
