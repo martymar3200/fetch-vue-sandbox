@@ -697,6 +697,21 @@ const cancelRefileJobEdits = () => {
   selectedItems.value = []
 }
 
+// When the server refuses a change, reload the job so the screen shows what a colleague changed
+const reloadAfterRefusal = async (error) => {
+  const status = error.response?.status
+  if (!status || status < 400 || status >= 500) {
+    return false
+  }
+  try {
+    await refileStore.getRefileJob(job.value.id)
+    saveState()
+  } catch {
+    // keep what is on screen; the refusal message already explains the problem
+  }
+  return true
+}
+
 const revertSelectedItemsToQueue = async () => {
   // refiled items are already back on the shelf, so only pending ones return to the queue
   const pendingItems = selectedItems.value.filter(item => item.status !== 'In')
@@ -725,6 +740,7 @@ const revertSelectedItemsToQueue = async () => {
       type: 'negative',
       message: error.response?.data?.detail || error.message || 'Failed to revert items'
     })
+    await reloadAfterRefusal(error)
   } finally {
     actionLoading.value = false
     selectedItems.value = []
@@ -879,8 +895,12 @@ const completeItemRefile = async (item) => {
   } catch (error) {
     notify({
       type: 'negative',
-      message: 'Failed to update item'
+      message: error.response?.data?.detail || 'Failed to update item'
     })
+    // a refused scan (job paused, item reverted) can't succeed on retry, so close and show the current job
+    if (await reloadAfterRefusal(error)) {
+      closeVerifyModal()
+    }
   } finally {
     actionLoading.value = false
   }
@@ -985,8 +1005,9 @@ const revertItem = async () => {
   } catch (error) {
     notify({
       type: 'negative',
-      message: 'Failed to revert item'
+      message: error.response?.data?.detail || 'Failed to revert item'
     })
+    await reloadAfterRefusal(error)
   } finally {
     actionLoading.value = false
     showRevertDialog.value = false

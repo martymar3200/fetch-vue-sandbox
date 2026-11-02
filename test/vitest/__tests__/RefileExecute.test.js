@@ -95,6 +95,13 @@ const mountPage = (status = 'Running') => {
   return wrapper
 }
 
+const refusal = detail => ({
+  response: {
+    status: 400,
+    data: { detail }
+  }
+})
+
 const revertSelected = async (wrapper, rows) => {
   wrapper.findComponent(JobPageHeader).props('menuOptions')
     .find(option => option.label == 'Edit Items')
@@ -156,6 +163,66 @@ describe('RefileExecute', () => {
         type: 'warning',
         message: 'Refiled items stay in the job and can not be reverted to the queue.'
       }))
+    })
+
+    it('shows the server\'s reason and reloads the job when the revert is refused', async () => {
+      const detail = 'Refiled items can not be reverted to the queue: PENDING-1'
+      useRefileStore().deleteRefileJobItems.mockRejectedValue(refusal(detail))
+      const wrapper = mountPage()
+      await flushPromises()
+      useRefileStore().getRefileJob.mockClear()
+
+      await revertSelected(wrapper, [PENDING])
+
+      expect(notify).toHaveBeenCalledWith(expect.objectContaining({
+        type: 'negative',
+        message: detail
+      }))
+      expect(useRefileStore().getRefileJob).toHaveBeenCalledWith(7)
+    })
+  })
+
+  describe('a refile scan', () => {
+    const openVerify = async () => {
+      const wrapper = mountPage()
+      await flushPromises()
+      compiledBarCode.value = 'PENDING-1'
+      await flushPromises()
+      useRefileStore().getRefileJob.mockClear()
+      return wrapper
+    }
+
+    it('shows the server\'s reason, reloads the job and closes the check when refused', async () => {
+      const detail = 'Can not scan items in Refile Job ID 7 in \'Paused\' status'
+      useRefileStore().patchRefileJobTrayItemScanned.mockRejectedValue(refusal(detail))
+      const wrapper = await openVerify()
+
+      wrapper.findComponent(RefileVerifyModal).vm.$emit('verify', PENDING)
+      await flushPromises()
+
+      expect(notify).toHaveBeenCalledWith(expect.objectContaining({
+        type: 'negative',
+        message: detail
+      }))
+      expect(useRefileStore().getRefileJob).toHaveBeenCalledWith(7)
+      expect(wrapper.findComponent(RefileVerifyModal).exists()).toBe(false)
+    })
+
+    it('keeps the check open to retry when the server or network fails', async () => {
+      useRefileStore().patchRefileJobTrayItemScanned.mockRejectedValue({
+        response: {
+          status: 503,
+          data: {}
+        }
+      })
+      const wrapper = await openVerify()
+
+      wrapper.findComponent(RefileVerifyModal).vm.$emit('verify', PENDING)
+      await flushPromises()
+
+      expect(notify).toHaveBeenCalledWith(expect.objectContaining({ message: 'Failed to update item' }))
+      expect(useRefileStore().getRefileJob).not.toHaveBeenCalled()
+      expect(wrapper.findComponent(RefileVerifyModal).exists()).toBe(true)
     })
   })
 })
