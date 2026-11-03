@@ -208,6 +208,37 @@ describe('RefileExecute', () => {
       expect(wrapper.findComponent(RefileVerifyModal).exists()).toBe(false)
     })
 
+    it('leaves a tray scan to the open check instead of looking it up as an item', async () => {
+      const wrapper = await openVerify()
+
+      compiledBarCode.value = 'TRAY-1'
+      await flushPromises()
+
+      expect(notify).not.toHaveBeenCalledWith(expect.objectContaining({ message: 'Item not found in this job' }))
+      expect(wrapper.findComponent(RefileVerifyModal).props('item').barcode.value).toBe('PENDING-1')
+    })
+
+    it('does not switch the open check to another item that is scanned', async () => {
+      const wrapper = await openVerify()
+
+      compiledBarCode.value = 'REFILED-2'
+      await flushPromises()
+
+      expect(notify).not.toHaveBeenCalledWith(expect.objectContaining({ message: 'Item already refiled' }))
+      expect(wrapper.findComponent(RefileVerifyModal).props('item').barcode.value).toBe('PENDING-1')
+    })
+
+    it('handles item scans again once the check is closed', async () => {
+      const wrapper = await openVerify()
+      wrapper.findComponent(RefileVerifyModal).vm.$emit('hide')
+      await flushPromises()
+
+      compiledBarCode.value = 'UNKNOWN-9'
+      await flushPromises()
+
+      expect(notify).toHaveBeenCalledWith(expect.objectContaining({ message: 'Item not found in this job' }))
+    })
+
     it('keeps the check open to retry when the server or network fails', async () => {
       useRefileStore().patchRefileJobTrayItemScanned.mockRejectedValue({
         response: {

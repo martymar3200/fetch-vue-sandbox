@@ -796,7 +796,8 @@ const cancelRefileJob = async () => {
 
 // Watchers
 watch(compiledBarCode, (newVal) => {
-  if (newVal && job.value?.status === 'Running' && !scanLock.value) {
+  // while the tray/shelf check is open, its scans belong to the check, not to this screen
+  if (newVal && job.value?.status === 'Running' && !scanLock.value && !showVerifyModal.value) {
     handleBarcodeScanned(newVal)
   }
 })
