@@ -208,6 +208,8 @@
                     dense
                     outlined
                     clearable
+                    mask="##########"
+                    inputmode="numeric"
                     placeholder="Search..."
                     class="column-filter-input"
                     @keyup.enter="applyColumnFilters"
@@ -942,14 +944,11 @@ const loadRefileJobs = async (qParams) => {
     appIsLoadingData.value = true
     if (refileDisplayType.value == 'refile_job') {
       // Build filter params
-      const filterParams = {
-        ...qParams,
-        user_id: checkUserPermission('can_view_all_refile_jobs') ? null : userData.value.user_id
-      }
+      const filterParams = { ...qParams }
 
       // Apply column filters
       if (jobColumnFilters.value.id) {
-        filterParams.id = jobColumnFilters.value.id
+        filterParams.workflow_id = jobColumnFilters.value.id
       }
       if (jobColumnFilters.value.status && jobColumnFilters.value.status.length > 0) {
         filterParams.status = jobColumnFilters.value.status
