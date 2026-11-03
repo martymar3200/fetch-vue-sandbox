@@ -968,13 +968,8 @@ const loadRefileJobs = async (qParams) => {
       }
 
       if (queueColumnFilters.value.location) {
-        // Convert displayed location format to database format
-        let locationSearch = queueColumnFilters.value.location
-        locationSearch = locationSearch.replace(/-R-/gi, '-Right-')
-        locationSearch = locationSearch.replace(/-L-/gi, '-Left-')
-        locationSearch = locationSearch.replace(/-R$/gi, '-Right')
-        locationSearch = locationSearch.replace(/-L$/gi, '-Left')
-        queueFilterParams.item_location = locationSearch
+        // the API's location uses the same L/R side letter as the column, so send it as typed
+        queueFilterParams.item_location = queueColumnFilters.value.location
       }
       if (queueColumnFilters.value.container_type && queueColumnFilters.value.container_type.length > 0) {
         queueFilterParams.container_type = queueColumnFilters.value.container_type

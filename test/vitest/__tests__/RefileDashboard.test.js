@@ -92,4 +92,29 @@ describe('RefileDashboard', () => {
       expect(lastJobListParams()).not.toHaveProperty('user_id')
     })
   })
+
+  describe('refile queue location filter', () => {
+    const showQueue = async () => {
+      const wrapper = await mountPage()
+      wrapper.findComponent({ name: 'QBtnToggle' }).vm.$emit('update:modelValue', 'refile_queue')
+      await flushPromises()
+      await showFilters(wrapper)
+      return wrapper
+    }
+
+    const lastQueueParams = () => useRefileStore().getRefileQueueList.mock.lastCall[0]
+
+    it.each([
+      '04-57-L-23-10-08',
+      '57-L-23',
+      '57-R',
+      '57-l-23'
+    ])('sends %s with the side letter the API stores', async (search) => {
+      const wrapper = await showQueue()
+
+      await searchFirstFilter(wrapper, search)
+
+      expect(lastQueueParams().item_location).toBe(search)
+    })
+  })
 })
