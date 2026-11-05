@@ -153,9 +153,16 @@
               >
                 ({{ item.barcode?.value }})
               </div>
+              <div
+                v-for="item in bin.non_tray_items"
+                :key="'nt-' + item.id"
+                class="text-caption"
+              >
+                ({{ item.barcode?.value }}) Non-Tray
+              </div>
             </td>
             <td class="text-right">
-              {{ bin.items?.length }}
+              {{ bin.item_count }}
             </td>
           </tr>
         </tbody>
@@ -259,8 +266,9 @@ const print = () => {
   batchSheetComponent.value.printManifest()
 }
 
+// item_count is the server's count of tray and non-tray items in the bin
 const totalItems = computed(() => {
-  return manifestData.value?.bins?.reduce((sum, bin) => sum + (bin.items?.length || 0), 0) || 0
+  return manifestData.value?.bins?.reduce((sum, bin) => sum + (bin.item_count || 0), 0) || 0
 })
 
 const formatDate = (dt) => {

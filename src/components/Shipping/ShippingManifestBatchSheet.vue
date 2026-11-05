@@ -64,6 +64,13 @@
                   >
                     ({{ item.barcode?.value }})
                   </div>
+                  <div
+                    v-for="item in bin.non_tray_items"
+                    :key="'nt-' + item.id"
+                    class="q-mb-xs"
+                  >
+                    ({{ item.barcode?.value }}) Non-Tray
+                  </div>
                 </td>
               </tr>
             </tbody>
@@ -92,8 +99,9 @@ const printTemplate = ref(null)
 // Logic
 const formatDateTime = inject('format-date-time')
 
+// item_count is the server's count of tray and non-tray items in the bin
 const totalItems = computed(() => {
-  return props.manifestData.bins?.reduce((sum, bin) => sum + (bin.items?.length || 0), 0) || 0
+  return props.manifestData.bins?.reduce((sum, bin) => sum + (bin.item_count || 0), 0) || 0
 })
 
 const printManifest = () => {
