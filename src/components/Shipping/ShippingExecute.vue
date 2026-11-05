@@ -342,10 +342,13 @@ const handleBinScan = async () => {
           type: 'negative',
           message: lastMessage.value
         })
-        // Keep pending item? or clear? Let's keep it so they can scan correct bin.
-        // But we locked the WRONG bin.
-        // User needs to unlock or scan correct bin.
-        // We should probably NOT lock if mismatch, but scanBin already happened.
+        // Keep the pending item so the right bin can be scanned, but drop the
+        // wrong bin: left as currentBin, the next item scan would go into it
+        store.currentBin = null
+        isBinLocked.value = false
+        nextTick(() => {
+          binInputRef.value?.focus()
+        })
         return
       }
 
