@@ -315,7 +315,15 @@ const loadJobs = async (pagination = {}) => {
   if (columnFilters.value.assigned_user?.length) {
     params.assigned_user = columnFilters.value.assigned_user
   }
-  await getShippingJobList(params)
+  try {
+    await getShippingJobList(params)
+  } catch (error) {
+    // e.g. "Shipping module is disabled" when the page is opened directly
+    notify({
+      type: 'negative',
+      message: error.response?.data?.detail || 'Failed to load shipping jobs'
+    })
+  }
 }
 
 const applyColumnFilters = () => {

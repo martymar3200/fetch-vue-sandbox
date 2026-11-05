@@ -289,7 +289,15 @@ const itemInputRef = ref(null)
 const jobId = route.params.jobId
 
 const loadJob = async () => {
-  await getShippingJob(jobId)
+  try {
+    await getShippingJob(jobId)
+  } catch (error) {
+    // e.g. "Shipping module is disabled" or a job that no longer exists
+    notify({
+      type: 'negative',
+      message: error.response?.data?.detail || 'Failed to load the shipping job'
+    })
+  }
 }
 
 onUnmounted(() => {

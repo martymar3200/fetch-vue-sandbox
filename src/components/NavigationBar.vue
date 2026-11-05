@@ -213,6 +213,7 @@ import { storeToRefs } from 'pinia'
 import { useGlobalStore } from '@/stores/global-store'
 import { useBarcodeStore } from '@/stores/barcode-store'
 import { useUserStore } from '@/stores/user-store'
+import { useOptionStore } from '@/stores/option-store'
 import { useOfflineSync } from '@/composables/useOfflineSync.js'
 import { usePermissionHandler } from '@/composables/usePermissionHandler.js'
 import { useCurrentScreenSize } from '@/composables/useCurrentScreenSize.js'
@@ -286,7 +287,8 @@ const essentialLinks = computed(() => {
       title: 'Shipping',
       icon: 'local_shipping',
       link: '/shipping',
-      requiresPerm: 'can_access_shipping'
+      requiresPerm: 'can_access_shipping',
+      requiresShippingModule: true
     },
     {
       title: 'Refile',
@@ -312,12 +314,32 @@ const essentialLinks = computed(() => {
   navLinks = navLinks.filter(l => {
     if (l.requiresPerm && !userData.value.permissions?.some(perm => perm === l.requiresPerm)) {
       return false
+    } else if (l.requiresShippingModule && shippingModuleOff.value) {
+      return false
     } else {
       return true
     }
   })
   return navLinks
 })
+
+// Shipping is hidden while the shipping module is turned off (Admin > Shipping).
+// A setting that was never saved counts as off, as on the server. If the check
+// fails for another reason (e.g. offline) the menu stays as it was.
+const shippingModuleOff = ref(false)
+const checkShippingModule = async () => {
+  if (!userData.value.permissions?.includes('can_access_shipping')) {
+    return
+  }
+  try {
+    const setting = await useOptionStore().getSystemSetting('shipping_module_enabled')
+    shippingModuleOff.value = String(setting?.value).toLowerCase() !== 'true'
+  } catch (error) {
+    if (error.response?.status === 404) {
+      shippingModuleOff.value = true
+    }
+  }
+}
 const adminLink = ref({
   title: 'Admin',
   icon: 'mdi-shield-account',
@@ -335,10 +357,15 @@ const mobileSearchOpen = ref(false)
 watch(route, () => {
   setMainNavDrawerOpen(false)
   mobileSearchOpen.value = false
+  // picks up a change made in Admin without a page reload
+  checkShippingModule()
 })
+
+watch(() => userData.value.user_id, checkShippingModule)
 
 
 onMounted(() => {
+  checkShippingModule()
   window.addEventListener('offline', () => {
     showOfflineBanner.value = true
 

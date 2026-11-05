@@ -94,4 +94,19 @@ describe('ShippingExecute', () => {
       expect(wrapper.findAllComponents({ name: 'TextInput' })[0].props('disable')).toBeFalsy()
     })
   })
+
+  it('shows the server message when the job can not load', async () => {
+    const { notify } = await import('@/utils/notify')
+    store.getShippingJob.mockRejectedValue({
+      response: { data: { detail: 'Shipping module is disabled' } }
+    })
+
+    await mountPage()
+
+    expect(notify).toHaveBeenCalledWith({
+      type: 'negative',
+      message: 'Shipping module is disabled'
+    })
+  })
+
 })

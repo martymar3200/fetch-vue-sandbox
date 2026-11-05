@@ -190,4 +190,27 @@ describe('ShippingDashboard', () => {
       })
     })
   })
+
+  it('shows the server message when the list can not load', async () => {
+    const { notify } = await import('@/utils/notify')
+    useShippingStore().getShippingJobList.mockRejectedValue({
+      response: { data: { detail: 'Shipping module is disabled' } }
+    })
+
+    mount(ShippingDashboard, {
+      global: {
+        stubs: {
+          EssentialTable: true,
+          ShippingClearBinModal: true
+        }
+      }
+    })
+    await flushPromises()
+
+    expect(notify).toHaveBeenCalledWith({
+      type: 'negative',
+      message: 'Shipping module is disabled'
+    })
+  })
+
 })
