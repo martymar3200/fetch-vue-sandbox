@@ -98,6 +98,7 @@ export const useShippingStore = defineStore('shipping-store', {
         const bin = res.data
         this.updateLocalBin(bin)
         this.currentBin = bin
+        await this.refreshStartedJob(jobId)
         return bin
       } catch (error) {
         throw error
@@ -137,11 +138,7 @@ export const useShippingStore = defineStore('shipping-store', {
         const bin = res.data
         this.updateLocalBin(bin)
         this.currentBin = bin
-
-        // Optimistically update status
-        if (this.shippingJob.status === 'Created') {
-          this.shippingJob.status = 'Running'
-        }
+        await this.refreshStartedJob(jobId)
 
         return bin
       } catch (error) {
@@ -174,6 +171,22 @@ export const useShippingStore = defineStore('shipping-store', {
         }
       } catch (error) {
         throw error
+      }
+    },
+
+    // The first scan starts the job on the server (Running, assigned to the scanner).
+    // Reload it once so the status and assignee shown are the server's.
+    async refreshStartedJob (jobId) {
+      if (![
+        'Created',
+        'Assigned'
+      ].includes(this.shippingJob.status)) {
+        return
+      }
+      try {
+        await this.getShippingJob(jobId)
+      } catch (error) {
+        // the scan itself worked; the next page load shows the new status
       }
     },
 
