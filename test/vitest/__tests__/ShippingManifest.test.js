@@ -81,4 +81,98 @@ describe('Shipping manifest', () => {
     expect(text).toContain('NON-TRAY-ITEM')
     expect(text).toContain('Total Items: 2')
   })
+
+  describe('location and bin views', () => {
+    const twoBins = {
+      id: 5,
+      completed_dt: null,
+      bins: [
+        {
+          id: 1,
+          barcode: 'BIN-B',
+          delivery_location_id: 2,
+          delivery_location: {
+            id: 2,
+            name: 'Reading Room'
+          },
+          items: [
+            {
+              id: 10,
+              barcode: { value: 'ITEM-RR' }
+            }
+          ],
+          non_tray_items: [],
+          item_count: 1
+        },
+        {
+          id: 3,
+          barcode: 'BIN-A',
+          delivery_location_id: 4,
+          delivery_location: {
+            id: 4,
+            name: 'Main Desk'
+          },
+          items: [
+            {
+              id: 11,
+              barcode: { value: 'ITEM-MD' }
+            }
+          ],
+          non_tray_items: [],
+          item_count: 1
+        }
+      ]
+    }
+
+    const mountManifest = async () => {
+      useShippingStore().getManifest.mockResolvedValue(twoBins)
+      const wrapper = mount(ShippingManifest, {
+        global: {
+          provide,
+          stubs: { ShippingManifestBatchSheet: true }
+        }
+      })
+      await flushPromises()
+      return wrapper
+    }
+
+    const pick = async (wrapper, scopeLabel, option) => {
+      await wrapper.findAll('button').find(b => b.text() === scopeLabel).trigger('click')
+      const select = wrapper.findComponent({ name: 'QSelect' })
+      await select.vm.$emit('update:modelValue', option)
+      await flushPromises()
+      return select
+    }
+
+    it('shows one location without fetching again, and still offers every location', async () => {
+      const wrapper = await mountManifest()
+
+      const select = await pick(wrapper, 'By Location', twoBins.bins[1].delivery_location)
+
+      const shown = wrapper.find('.manifest-content').text()
+      expect(shown).toContain('ITEM-MD')
+      expect(shown).not.toContain('ITEM-RR')
+      expect(select.props('options').map(o => o.name)).toEqual([
+        'Main Desk',
+        'Reading Room'
+      ])
+      expect(useShippingStore().getManifest).toHaveBeenCalledTimes(1)
+    })
+
+    it('shows one bin without fetching again', async () => {
+      const wrapper = await mountManifest()
+
+      const select = await pick(wrapper, 'By Bin', twoBins.bins[0])
+
+      const shown = wrapper.find('.manifest-content').text()
+      expect(shown).toContain('ITEM-RR')
+      expect(shown).not.toContain('ITEM-MD')
+      expect(shown).toContain('Total Items: 1')
+      expect(select.props('options').map(o => o.barcode)).toEqual([
+        'BIN-A',
+        'BIN-B'
+      ])
+      expect(useShippingStore().getManifest).toHaveBeenCalledTimes(1)
+    })
+  })
 })

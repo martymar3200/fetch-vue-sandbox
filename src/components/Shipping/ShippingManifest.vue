@@ -71,7 +71,6 @@
           label="Select Location"
           outlined
           dense
-          @update:model-value="loadManifest"
         />
       </div>
     </div>
@@ -90,7 +89,6 @@
           label="Select Bin"
           outlined
           dense
-          @update:model-value="loadManifest"
         />
       </div>
     </div>
@@ -193,58 +191,51 @@ const jobId = route.params.jobId
 const scope = ref('full')
 const selectedLocation = ref(null)
 const selectedBin = ref(null)
-const manifestData = ref(null)
 const loading = ref(false)
-
-const locationOptions = ref([])
-const binOptions = ref([])
 const batchSheetComponent = ref(null)
+
+// The whole job, fetched once. Location and bin views filter it here, so
+// changing them needs no request and the dropdowns always list every option.
+const fullManifest = ref(null)
+
+const manifestData = computed(() => {
+  const data = fullManifest.value
+  if (!data) {
+    return null
+  }
+  if (scope.value === 'location' && selectedLocation.value) {
+    return {
+      ...data,
+      bins: data.bins.filter(b => b.delivery_location_id === selectedLocation.value.id)
+    }
+  }
+  if (scope.value === 'bin' && selectedBin.value) {
+    return {
+      ...data,
+      bins: data.bins.filter(b => b.id === selectedBin.value.id)
+    }
+  }
+  return data
+})
+
+const locationOptions = computed(() => {
+  const unique = new Map()
+  fullManifest.value?.bins?.forEach(bin => {
+    if (bin.delivery_location) {
+      unique.set(bin.delivery_location.id, bin.delivery_location)
+    }
+  })
+  return Array.from(unique.values()).sort((a, b) => (a.name || '').localeCompare(b.name || ''))
+})
+
+const binOptions = computed(() => {
+  return [...(fullManifest.value?.bins || [])].sort((a, b) => a.barcode.localeCompare(b.barcode))
+})
 
 const loadManifest = async () => {
   loading.value = true
   try {
-    const filterId = scope.value === 'location' ? selectedLocation.value?.id
-      : scope.value === 'bin' ? selectedBin.value?.id : null
-
-    // For 'bin' scope, we fetch the full manifest and filter in memory since backend
-    // filtering for bin might not be supported or we want client-side speed.
-    const fetchScope = scope.value === 'bin' ? 'full' : scope.value
-    const fetchFilterId = scope.value === 'bin' ? null : filterId
-
-    const data = await getManifest(jobId, fetchScope, fetchFilterId)
-
-    // Create a deep copy or new object to avoid mutating store state if we filter
-    // But since data is likely a new object from store action, we can modify or create derivative
-    let filteredData = { ...data }
-
-    if (scope.value === 'bin' && selectedBin.value) {
-      // Filter bins
-      filteredData.bins = data.bins.filter(b => b.id === selectedBin.value.id)
-    }
-
-    manifestData.value = filteredData
-
-    // Extract options
-    if (data.bins) {
-      // Locations
-      const uniqueLocs = new Map()
-      const uniqueBins = new Map()
-
-      data.bins.forEach(bin => {
-        if (bin.delivery_location) {
-          uniqueLocs.set(bin.delivery_location.id, bin.delivery_location)
-        }
-        uniqueBins.set(bin.id, bin)
-      })
-
-      if (uniqueLocs.size > 0) {
-        locationOptions.value = Array.from(uniqueLocs.values()).sort((a, b) => (a.name || '').localeCompare(b.name || ''))
-      }
-      if (uniqueBins.size > 0) {
-        binOptions.value = Array.from(uniqueBins.values()).sort((a, b) => a.barcode.localeCompare(b.barcode))
-      }
-    }
-
+    fullManifest.value = await getManifest(jobId, 'full')
   } catch (e) {
     notify({
       type: 'negative',
@@ -259,7 +250,6 @@ const updateScope = (newScope) => {
   scope.value = newScope
   selectedLocation.value = null
   selectedBin.value = null
-  loadManifest()
 }
 
 const print = () => {
