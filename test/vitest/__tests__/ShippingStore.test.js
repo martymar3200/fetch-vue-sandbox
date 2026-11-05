@@ -83,4 +83,63 @@ describe('shipping store', () => {
       expect(store.shippingJob.status).toBe('Created')
     })
   })
+
+  describe('removing an item', () => {
+    it('shows the bin the server returns, count included', async () => {
+      const fullBin = {
+        ...bin,
+        items: [
+          { id: 1 },
+          { id: 2 }
+        ],
+        item_count: 2,
+        delivery_location_id: 4
+      }
+      const afterRemove = {
+        ...bin,
+        items: [{ id: 2 }],
+        item_count: 1,
+        delivery_location_id: 4
+      }
+      store.shippingJob = {
+        id: 9,
+        status: 'Running',
+        bins: [fullBin]
+      }
+      store.currentBin = fullBin
+      mockApi.delete.mockResolvedValue({ data: afterRemove })
+
+      await store.removeItemFromBin(9, 3, 1, 'item')
+
+      expect(store.shippingJob.bins[0].item_count).toBe(1)
+      expect(store.shippingJob.bins[0].items).toEqual([{ id: 2 }])
+      expect(store.currentBin.item_count).toBe(1)
+    })
+
+    it('clears the destination of a bin the server emptied', async () => {
+      store.shippingJob = {
+        id: 9,
+        status: 'Running',
+        bins: [
+          {
+            ...bin,
+            items: [{ id: 1 }],
+            item_count: 1,
+            delivery_location_id: 4
+          }
+        ]
+      }
+      mockApi.delete.mockResolvedValue({
+        data: {
+          ...bin,
+          delivery_location_id: null
+        }
+      })
+
+      await store.removeItemFromBin(9, 3, 1, 'item')
+
+      expect(store.shippingJob.bins[0].item_count).toBe(0)
+      expect(store.shippingJob.bins[0].delivery_location_id).toBeNull()
+    })
+  })
 })
