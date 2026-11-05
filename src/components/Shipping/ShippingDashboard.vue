@@ -92,6 +92,8 @@
                   dense
                   outlined
                   clearable
+                  mask="##########"
+                  inputmode="numeric"
                   placeholder="Search..."
                   class="column-filter-input"
                   debounce="400"
@@ -115,51 +117,26 @@
                   outlined
                   clearable
                   multiple
-                  :options="['Created', 'Assigned', 'Running', 'Completed']"
+                  :options="['Created', 'Assigned', 'Running', 'Paused', 'Completed']"
                   placeholder="Status"
                   class="column-filter-input"
                   @update:model-value="applyColumnFilters"
                   @click.stop
                 />
 
-                <!-- Created Date Filter -->
-                <q-input
-                  v-else-if="col.name === 'create_dt'"
-                  v-model="columnFilters.create_dt"
-                  dense
-                  outlined
-                  clearable
-                  placeholder="Search..."
-                  class="column-filter-input"
-                  debounce="400"
-                  @update:model-value="applyColumnFilters"
-                  @click.stop
-                />
-
-                <!-- Last Transition Filter -->
-                <q-input
-                  v-else-if="col.name === 'last_transition'"
-                  v-model="columnFilters.last_transition"
-                  dense
-                  outlined
-                  clearable
-                  placeholder="Search..."
-                  class="column-filter-input"
-                  debounce="400"
-                  @update:model-value="applyColumnFilters"
-                  @click.stop
-                />
-
-                <!-- Assigned User Filter -->
-                <q-input
+                <!-- Assigned User Filter: full names, which the API matches exactly -->
+                <q-select
                   v-else-if="col.name === 'assigned_user_id'"
-                  v-model="columnFilters.assigned_user_id"
+                  v-model="columnFilters.assigned_user"
                   dense
                   outlined
                   clearable
-                  placeholder="Search Name..."
+                  multiple
+                  emit-value
+                  map-options
+                  :options="userOptions"
+                  placeholder="All"
                   class="column-filter-input"
-                  debounce="400"
                   @update:model-value="applyColumnFilters"
                   @click.stop
                 />
@@ -221,11 +198,12 @@
 
 <script setup>
 import BaseButton from '@/components/Base/BaseButton.vue'
-import { ref, onMounted } from 'vue'
+import { ref, computed, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
 import { storeToRefs } from 'pinia'
 import { notify } from '@/utils/notify'
 import { useShippingStore } from '@/stores/shipping-store'
+import { useOptionStore } from '@/stores/option-store'
 import { useCurrentScreenSize } from '@/composables/useCurrentScreenSize.js'
 import EssentialTable from '@/components/EssentialTable.vue'
 import ShippingClearBinModal from '@/components/Shipping/ShippingClearBinModal.vue'
@@ -234,18 +212,28 @@ const router = useRouter()
 const store = useShippingStore()
 const { shippingJobList, shippingJobListTotal } = storeToRefs(store)
 const { getShippingJobList, createShippingJob } = store
+const { users } = storeToRefs(useOptionStore())
+const { getOptions } = useOptionStore()
 const { currentScreenSize } = useCurrentScreenSize()
 
 const showClearBinModal = ref(false)
 const creatingJob = ref(false)
 const showFilterRow = ref(false)
-const columnFilters = ref({
+const emptyFilters = () => ({
   id: null,
   status: null,
-  create_dt: null,
-  last_transition: null,
-  assigned_user_id: null
+  assigned_user: null
 })
+const columnFilters = ref(emptyFilters())
+// Last sort the table asked for, kept when a filter changes
+const tableSort = ref({})
+
+const userOptions = computed(() =>
+  users.value.map(u => ({
+    label: u.name,
+    value: u.name
+  }))
+)
 
 // Columns
 const columns = [
@@ -298,38 +286,59 @@ const columns = [
 ]
 
 // Logic
-const loadJobs = async (pagination) => {
-  // map pagination to query params
+// Sends only the params the API reads (EssentialTable's event also carries
+// Quasar's rowsPerPage/sortBy/descending/rowsNumber)
+const loadJobs = async (pagination = {}) => {
+  if (pagination.sort_by !== undefined || pagination.page !== undefined) {
+    tableSort.value = pagination.sort_by
+      ? {
+          sort_by: pagination.sort_by,
+          sort_order: pagination.sort_order
+        }
+      : {}
+  }
+
   const params = {
-    page: pagination?.page || 1,
-    size: pagination?.rowsPerPage || 25,
+    page: pagination.page || 1,
+    size: pagination.size || pagination.rowsPerPage || 25,
     status: columnFilters.value.status?.length ? columnFilters.value.status : [
       'Created',
       'Assigned',
-      'Running'
+      'Running',
+      'Paused'
     ],
-    id: columnFilters.value.id,
-    create_dt: columnFilters.value.create_dt,
-    last_transition: columnFilters.value.last_transition,
-    assigned_user: columnFilters.value.assigned_user_id ? [columnFilters.value.assigned_user_id] : null,
-    ...pagination
+    ...tableSort.value
+  }
+  if (columnFilters.value.id) {
+    params.workflow_id = columnFilters.value.id
+  }
+  if (columnFilters.value.assigned_user?.length) {
+    params.assigned_user = columnFilters.value.assigned_user
   }
   await getShippingJobList(params)
 }
 
 const applyColumnFilters = () => {
-  loadJobs({})
+  loadJobs()
 }
 
 const clearColumnFilters = () => {
-  columnFilters.value = {
-    id: null,
-    status: null,
-    create_dt: null,
-    last_transition: null,
-    assigned_user_id: null
+  columnFilters.value = emptyFilters()
+  loadJobs()
+}
+
+const loadUserOptions = async () => {
+  try {
+    await getOptions('users', {
+      sort_by: 'name',
+      size: 100
+    })
+  } catch (error) {
+    notify({
+      type: 'negative',
+      message: error.response?.data?.detail || 'Failed to load the user list'
+    })
   }
-  loadJobs({})
 }
 
 const submitCreateJob = async () => {
@@ -380,6 +389,7 @@ const getStatusBadgeClass = (status) => {
 
 onMounted(() => {
   loadJobs()
+  loadUserOptions()
 })
 
 </script>
