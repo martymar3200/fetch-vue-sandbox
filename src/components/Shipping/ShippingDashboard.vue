@@ -168,7 +168,7 @@
             </q-tr>
           </template>
 
-          <template #table-td="{ colName, value }">
+          <template #table-td="{ colName, value, props }">
             <span
               v-if="colName == 'status'"
               class="status-badge"
@@ -193,8 +193,8 @@
                     <q-item
                       clickable
                       v-close-popup
-                      :disable="row.status !== 'Completed'"
-                      @click="router.push({ name: 'shipping-manifest', params: { jobId: row.id } })"
+                      :disable="props.row.status !== 'Completed'"
+                      @click="router.push({ name: 'shipping-manifest', params: { jobId: props.row.id } })"
                     >
                       <q-item-section>View Manifest</q-item-section>
                     </q-item>
